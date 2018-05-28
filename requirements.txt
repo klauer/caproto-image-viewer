@@ -1,0 +1,4 @@
+caproto
+PyQt5
+matplotlib
+numpy
