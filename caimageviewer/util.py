@@ -3,29 +3,14 @@ import argparse
 
 
 def get_image_size(width, height, depth, color_mode):
-    # TODO all wrong
-    if color_mode == 'Mono':
-        return (width, height)
-    elif color_mode == 'RGB1':
-        return (height, depth)
-    elif color_mode == 'RGB2':
-        return (width, depth)
-    elif color_mode == 'RGB3':
-        return (width, height)
-
-
-def get_array_dimensions(width, height, depth, color_mode):
-    width, height, depth = (sz if sz else 1
-                            for sz in (width, height, depth))
-
-    if color_mode == 'Mono':
-        return (width, height, depth)
-    elif color_mode == 'RGB1':
-        return (width, height, depth)
-    elif color_mode == 'RGB2':
-        return (width, 3, depth)
-    elif color_mode == 'RGB3':
-        return (width, height, 3)
+    'Returns (image_width, image_height, num_channels)'
+    return {
+        'Mono': (width, height, 1),
+        'RGB1': (height, depth, 3),
+        'RGB2': (width, depth, 3),
+        'RGB3': (width, height, 3),
+        'Bayer': (width, height, 1),
+    }[color_mode]
 
 
 def show_statistics(image_times, *, plot_times=True):

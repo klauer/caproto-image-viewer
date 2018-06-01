@@ -16,7 +16,7 @@ def main():
     parser.add_argument('--acquire', default=False, action='store_true',
                         help='Start acquisition when viewing')
     parser.add_argument('--backend', type=str, default='threaded',
-                        choices=['threaded', 'pyepics', 'sync'],
+                        choices=['threaded', 'pyepics', 'sync', 'static'],
                         help='caproto backend to use')
 
     # --gl

@@ -5,85 +5,31 @@ import matplotlib
 import matplotlib.cm
 
 import numpy as np
-import ctypes
-from contextlib import contextmanager
 
 from PyQt5 import QtCore, QtGui
 from PyQt5.QtCore import pyqtSlot
 from PyQt5.QtWidgets import QOpenGLWidget
-from PyQt5.QtGui import QOpenGLBuffer, QOpenGLTexture
 
-from .util import (show_statistics, get_image_size, get_array_dimensions)
 
 from caproto import ChannelType
 
 logger = logging.getLogger(__name__)
 
 
-def setup_vertex_buffer(gl, data, shader, shader_variable):
-    'Setup a vertex buffer with `data` vertices as `shader_variable` on shader'
-    vbo = QOpenGLBuffer(QOpenGLBuffer.VertexBuffer)
-    vbo.create()
-    with bind(vbo):
-        vertices = np.array(data, np.float32)
-        count, dim_vertex = vertices.shape
-        vbo.allocate(vertices.flatten(), vertices.nbytes)
-
-        attr_loc = shader.attributeLocation(shader_variable)
-        shader.enableAttributeArray(attr_loc)
-        shader.setAttributeBuffer(attr_loc, gl.GL_FLOAT, 0, dim_vertex)
-    return vbo
 
 
-def initialize_pbo(pbo, data, *, mapped_array=None):
-    with bind(pbo):
-        full_size = data.nbytes
-        width, height, depth = data.shape
-
-        if (pbo.isCreated() and pbo.size() >= full_size and
-                mapped_array is not None):
-            mapped_array[:] = data.reshape((width, height, depth))
-            return mapped_array
-
-    pbo.create()
-    with bind(pbo):
-        pbo.allocate(data, full_size)
-
-        ptr = pbo.map(QOpenGLBuffer.WriteOnly)
-        assert ptr is not None, 'Failed to map pixel buffer array'
-
-        dest = ctypes.cast(int(ptr), ctypes.POINTER(ctypes.c_byte))
-        mapped_array = np.ctypeslib.as_array(dest,
-                                             shape=(width, height, depth))
-        pbo.unmap()
-    return mapped_array
 
 
-def update_pbo_texture(gl, pbo, texture, *, array_data, texture_format,
-                       source_format, source_type):
-
-    width, height, depth = array_data.shape
-
-    with bind(pbo, texture):
-        gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MIN_FILTER,
-                           gl.GL_LINEAR)
-        gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MAG_FILTER,
-                           gl.GL_LINEAR)
-        gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, texture_format, width, height, 0,
-                        source_format, source_type, None)
 
 
-@contextmanager
-def bind(*objs, args=None):
-    'Bind all objs (optionally with positional arguments); releases at cleanup'
-    if args is None:
-        args = ()
 
-    for obj in objs:
-        obj.bind(*args)
-    yield
-    for obj in objs[::-1]:
-        obj.release()
+
+
+
+
+
+
+
 
 
 class ImageViewerWidget(QOpenGLWidget):
