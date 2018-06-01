@@ -14,18 +14,19 @@ classifiers = [
     'License :: OSI Approved :: BSD License'
 ]
 
+
 setup(name='caproto-image-viewer',
       version=versioneer.get_version(),
       cmdclass=versioneer.get_cmdclass(),
       description='caproto AreaDetector image viewer',
       packages=['caimageviewer',
                 ],
-      scripts=glob.glob('scripts/*'),
       entry_points={
           'console_scripts': [
               'caimageviewer = caimageviewer.__main__:main',
           ]
       },
+      package_data={'caimageviewer': ['*.fs', '*.vs']},
       python_requires='>=3.6',
       classifiers=classifiers
       )

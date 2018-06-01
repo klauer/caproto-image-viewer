@@ -45,7 +45,7 @@ def show_statistics(image_times, *, plot_times=True):
 
     fig, ax1 = plt.subplots(1, 1)
 
-    max_range = avg_frame * 15
+    max_range = min((0.5, avg_frame * 15))
     bins = int(max_range / 0.002)  # 2ms bins
 
     ax1.hist((display_times - frame_times), label='IOC to screen latency',

@@ -37,7 +37,7 @@ def main():
 
     if args.gl:
         print('Using OpenGL')
-        from .viewergl import ImageViewerWidget
+        from .viewergl import ImageViewerWidgetGL as ImageViewerWidget
     else:
         print('Using basic viewer')
         from .viewer import ImageViewerWidget

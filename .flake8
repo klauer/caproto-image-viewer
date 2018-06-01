@@ -1,0 +1,4 @@
+[flake8]
+ignore = E402
+exclude = .git,__pycache__,versioneer.py,caimageviewer/_version.py
+max-line-length = 115

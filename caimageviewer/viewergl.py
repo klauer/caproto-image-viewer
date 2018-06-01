@@ -7,6 +7,7 @@ import matplotlib.cm
 import numpy as np
 from collections import namedtuple
 
+from pathlib import Path
 from PyQt5 import QtCore, QtGui
 from PyQt5.QtCore import pyqtSlot
 from PyQt5.QtWidgets import QOpenGLWidget
@@ -88,7 +89,7 @@ class ImageShader:
         }
     """
 
-    _fragment_source = """\
+    fragment_source = """\
         #version 410 core
 
         uniform highp sampler2D LUT;
@@ -121,8 +122,19 @@ class ImageShader:
         else:
             self.definitions = ''
 
-        self.fragment_source = self._fragment_source % (self.definitions,
-                                                        fragment_main)
+        if isinstance(self.fragment_source, Path):
+            with open(self.fragment_source, 'rt') as f:
+                source = f.read()
+            self.fragment_source = source % (self.definitions, fragment_main)
+        else:
+            self.fragment_source = self.fragment_source % (self.definitions,
+                                                           fragment_main)
+
+        if isinstance(self.vertex_source, Path):
+            with open(self.vertex_source, 'rt') as f:
+                source = f.read()
+            self.vertex_source = source
+
         self.shader = QtGui.QOpenGLShaderProgram(opengl_widget)
         self.shader.addShaderFromSourceCode(QtGui.QOpenGLShader.Vertex,
                                             self.vertex_source)
@@ -210,138 +222,9 @@ class BayerShader(ImageShader):
     NOTE: see LICENSE for source of the original GLSL shader code.
     This has been modified for usage with GLSL 4.10 by @klauer
     '''
+    vertex_source = Path(__file__).parent / 'bayer.vs'
+    fragment_source = Path(__file__).parent / 'bayer.fs'
 
-    vertex_source = """\
-        #version 410 core
-
-        in vec3 position;
-        in vec2 texCoord;
-        uniform mat4 mvp;
-
-        /** (w,h,1/w,1/h) */
-        uniform vec4 sourceSize;
-
-        /** Pixel position of the first red pixel in the Bayer pattern. [{0,1}, {0, 1}]*/
-        uniform vec2 firstRed;
-
-        // Output of vertex shader stage, to fragment shader:
-        out VS_OUT
-        {
-           /** .xy = Pixel being sampled in the fragment shader on the range [0, 1]
-               .zw = ...on the range [0, sourceSize], offset by firstRed */
-           vec4 center;
-
-           /** center.x + (-2/w, -1/w, 1/w, 2/w); These are the x-positions of the adjacent pixels.*/
-           vec4 xCoord;
-
-           /** center.y + (-2/h, -1/h, 1/h, 2/h); These are the y-positions of the adjacent pixels.*/
-           vec4 yCoord;
-        } vs_out;
-
-        void main(void) {
-            vs_out.center.xy = texCoord.xy;
-            vs_out.center.zw = texCoord.xy * sourceSize.xy + firstRed;
-            vec2 invSize = sourceSize.zw;
-            vs_out.xCoord = vs_out.center.x + vec4(-2.0 * invSize.x, -invSize.x, invSize.x, 2.0 * invSize.x);
-            vs_out.yCoord = vs_out.center.y + vec4(-2.0 * invSize.y, -invSize.y, invSize.y, 2.0 * invSize.y);
-            gl_Position = mvp * vec4(position, 1.0);
-        }
-    """
-
-    _fragment_source = """\
-        #version 410 core
-
-        /** Monochrome image stored in red component */
-        uniform highp sampler2D LUT;
-        uniform highp sampler2D image;
-
-        // User definitions
-        %s
-
-        in VS_OUT
-        {
-            vec4 center;
-            vec4 xCoord;
-            vec4 yCoord;
-        } fs_in;
-
-        layout(location=0, index=0) out vec4 color;
-
-        // Even the simplest compilers should be able to constant-fold these to avoid the division.
-        // Note that on scalar processors these constants force computation of some identical products twice.
-        const vec4 kA = vec4(-1.0, -1.5, 0.5, -1.0) / 8.0;
-        const vec4 kB = vec4( 2.0, 0.0, 0.0, 4.0) / 8.0;
-        const vec4 kD = vec4( 0.0, 2.0, -1.0, -1.0) / 8.0;
-
-        void main(void) {
-            #define fetch(x, y) texture(image, vec2(x, y)).r
-            float C = texture(image, fs_in.center.xy).r; // ( 0, 0)
-
-            const vec4 kC = vec4( 4.0, 6.0, 5.0, 5.0) / 8.0;
-
-            // Determine which of four types of pixels we are on.
-            vec2 alternate = mod(floor(fs_in.center.zw), 2.0);
-            vec4 Dvec = vec4(fetch(fs_in.xCoord[1], fs_in.yCoord[1]),  // (-1,-1)
-                             fetch(fs_in.xCoord[1], fs_in.yCoord[2]),  // (-1, 1)
-                             fetch(fs_in.xCoord[2], fs_in.yCoord[1]),  // ( 1,-1)
-                             fetch(fs_in.xCoord[2], fs_in.yCoord[2])); // ( 1, 1)
-            vec4 PATTERN = (kC.xyz * C).xyzz;
-            // Can also be a dot product with (1,1,1,1) on hardware where that is
-            // specially optimized.
-            // Equivalent to: D = Dvec[0] + Dvec[1] + Dvec[2] + Dvec[3];
-            Dvec.xy += Dvec.zw;
-            Dvec.x += Dvec.y;
-            vec4 value = vec4(fetch(fs_in.center.x, fs_in.yCoord[0]),  // ( 0,-2)
-                              fetch(fs_in.center.x, fs_in.yCoord[1]),  // ( 0,-1)
-                              fetch(fs_in.xCoord[0], fs_in.center.y),  // ( 1, 0)
-                              fetch(fs_in.xCoord[1], fs_in.center.y)); // ( 2, 0)
-            vec4 temp = vec4(fetch(fs_in.center.x, fs_in.yCoord[3]),  // ( 0, 2)
-                             fetch(fs_in.center.x, fs_in.yCoord[2]),  // ( 0, 1)
-                             fetch(fs_in.xCoord[3], fs_in.center.y),  // ( 2, 0)
-                             fetch(fs_in.xCoord[2], fs_in.center.y)); // ( 1, 0)
-            // Conserve constant registers and take advantage of free swizzle on load
-            #define kE (kA.xywz)
-            #define kF (kB.xywz)
-            value += temp;
-            // There are five filter patterns (identity, cross, checker,
-            // theta, phi). Precompute the terms from all of them and then
-            // use swizzles to assign to color channels.
-            //
-            // Channel Matches
-            // x cross (e.g., EE G)
-            // y checker (e.g., EE B)
-            // z theta (e.g., EO R)
-            // w phi (e.g., EO R)
-
-            #define A (value[0])
-            #define B (value[1])
-            #define D (Dvec.x)
-            #define E (value[2])
-            #define F (value[3])
-            // Avoid zero elements. On a scalar processor this saves two MADDs and it has no
-            // effect on a vector processor.
-            PATTERN.yzw += (kD.yz * D).xyy;
-            PATTERN += (kA.xyz * A).xyzx + (kE.xyw * E).xyxz;
-            PATTERN.xw += kB.xw * B;
-            PATTERN.xz += kF.xz * F;
-
-            // Note: original implementation did a float equality comparison
-            // here with multiple confusing ternary operators
-            if (alternate.y < 0.5) {
-                if (alternate.x < 0.5)
-                    color.rgba = vec4(C, PATTERN.xy, 1.0);
-                else
-                    color.rgba = vec4(PATTERN.z, C, PATTERN.w, 1.0);
-            } else {
-                if (alternate.x < 0.5)
-                    color.rgba = vec4(PATTERN.w, C, PATTERN.z, 1.0);
-                else
-                    color.rgba = vec4(PATTERN.yx, C, 1.0);
-            }
-            // User return-value modification
-            %s
-        }
-"""
     patterns = {
         'RGGB': QtGui.QVector2D(0, 0),
         'GBRG': QtGui.QVector2D(0, 1),
@@ -376,15 +259,15 @@ class BayerShader(ImageShader):
         bayer_pattern = image_type.bayer_pattern
         self.opengl_widget.makeCurrent()
         with bind(self.shader):
-            self.shader.setUniformValue('sourceSize',
-                                        QtGui.QVector4D(width, height,
-                                                        1. / width, 1. / height))
+            size_vector = QtGui.QVector4D(width, height,
+                                          1. / width, 1. / height)
+            self.shader.setUniformValue('sourceSize', size_vector)
             if bayer_pattern:
                 self.shader.setUniformValue('firstRed',
                                             self.patterns[bayer_pattern])
 
 
-class ImageViewerWidget(QOpenGLWidget):
+class ImageViewerWidgetGL(QOpenGLWidget):
     basic_gl_data_types = {
         ChannelType.CHAR: 'GL_UNSIGNED_BYTE',
         ChannelType.INT: 'GL_UNSIGNED_SHORT',
@@ -415,7 +298,7 @@ class ImageViewerWidget(QOpenGLWidget):
         # 'YUV421': (np., 'GL_RED', 'GL_UNSIGNED_BYTE'),
     }
 
-    vertex_src = """\
+    vertex_source = """\
         #version 410 core
 
         in vec3 position;
@@ -435,7 +318,7 @@ class ImageViewerWidget(QOpenGLWidget):
         }
 """
 
-    fragment_src = """\
+    fragment_source = """\
         #version 410 core
 
         uniform highp sampler2D image;
