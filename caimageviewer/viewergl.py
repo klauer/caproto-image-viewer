@@ -205,6 +205,12 @@ class ImageShader:
 
 
 class BayerShader(ImageShader):
+    '''Shader which performs bayer demosaic filtering
+
+    NOTE: see LICENSE for source of the original GLSL shader code.
+    This has been modified for usage with GLSL 4.10 by @klauer
+    '''
+
     vertex_source = """\
         #version 410 core
 
@@ -786,8 +792,26 @@ class ImageViewerWidget(QOpenGLWidget):
     def keyPressEvent(self, event):
         if event.key() == QtCore.Qt.Key_Escape:
             self.close()
-        elif event.key() == QtCore.Qt.Key_Space:
+        elif event.key() == QtCore.Qt.Key_P:
+            self.cmap_preview = not self.cmap_preview
+            if not self.cmap_preview:
+                with bind(self.shader.vao):
+                    update_vertex_buffer(self.shader.vbo_vertices,
+                                         self.shader.full_screen_vertices)
+        elif event.key() == QtCore.Qt.Key_P:
+            self.cmap_preview = not self.cmap_preview
+            if not self.cmap_preview:
+                with bind(self.shader.vao):
+                    update_vertex_buffer(self.shader.vbo_vertices,
+                                         self.shader.full_screen_vertices)
+        elif event.key() in (QtCore.Qt.Key_BracketLeft,
+                             QtCore.Qt.Key_BracketRight):
             keys = list(self.lutables.keys())
-            next_idx = (keys.index(self.colormap) + 1) % len(keys)
+            if event.key() == QtCore.Qt.Key_BracketRight:
+                next_idx = (keys.index(self.colormap) + 1) % len(keys)
+            else:
+                next_idx = (keys.index(self.colormap) - 1) % len(keys)
             self.colormap = keys[next_idx]
             self.select_lut(self.colormap)
+        elif event.key() == QtCore.Qt.Key_C:
+            self.shader.cycle()
