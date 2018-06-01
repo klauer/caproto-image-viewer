@@ -69,49 +69,8 @@ class TextureAndPBO:
 
 
 class ImageShader:
-    vertex_source = """\
-        #version 410 core
-
-        in vec3 position;
-        in vec2 texCoord;
-        uniform mat4 mvp;
-
-        // Output of vertex shader stage, to fragment shader:
-        out VS_OUT
-        {
-                vec2 texc;
-        } vs_out;
-
-        void main(void)
-        {
-            gl_Position = mvp * vec4(position, 1.0);
-            vs_out.texc = texCoord;
-        }
-    """
-
-    fragment_source = """\
-        #version 410 core
-
-        uniform highp sampler2D LUT;
-        uniform highp sampler2D image;
-        %s
-
-        layout(location=0, index=0) out vec4 fragColor;
-
-        // Input from vertex shader stage
-        in VS_OUT
-        {
-            vec2 texc;
-        } fs_in;
-
-        // Output is a color for each pixel
-        out vec4 color;
-
-        void main(void)
-        {
-            %s
-        }
-    """
+    vertex_source = Path(__file__).parent / 'basic.vs'
+    fragment_source = Path(__file__).parent / 'basic.fs'
 
     def __init__(self, opengl_widget, *, fragment_main, definitions=None,
                  separate_channels=False):
