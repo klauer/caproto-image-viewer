@@ -324,7 +324,7 @@ class ImageViewerWidgetGL(QOpenGLWidget):
         self.gl_initialized = False
         self._state = 'connecting'
         self.colormap = default_colormap
-        self.using_lut = False
+        self.using_colormap = False
         self.load_colormaps()
 
         self.monitor = monitor
@@ -333,7 +333,7 @@ class ImageViewerWidgetGL(QOpenGLWidget):
         self.monitor.errored.connect(self.monitor_errored)
         self.monitor.start()
 
-        assert self.colormap in self.lutables
+        assert self.colormap in self.colormaps
         self.title = ''
 
     @property
@@ -391,10 +391,10 @@ class ImageViewerWidgetGL(QOpenGLWidget):
 
         self.makeCurrent()
 
-        if self.using_lut:
-            self.shader = self.shaders_with_lut[color_mode]
+        if self.using_colormap:
+            self.shader = self.shaders_with_cmap[color_mode]
         else:
-            self.shader = self.shaders_without_lut[color_mode]
+            self.shader = self.basic_shaders[color_mode]
 
         self.shader.update(width, height, depth, color_mode, bayer_pattern)
 
@@ -473,7 +473,7 @@ class ImageViewerWidgetGL(QOpenGLWidget):
         self.image_g = TextureAndPBO(self.gl)
         self.image_b = TextureAndPBO(self.gl)
 
-        self.separate_channel_no_lut_shader = ImageShader(
+        self.separate_channel_no_cmap_shader = ImageShader(
             self,
             definitions=[
                 'uniform highp sampler2D imageR;',
@@ -506,7 +506,7 @@ class ImageViewerWidgetGL(QOpenGLWidget):
                 color = texture(LUT, vec2(orig, 0.0)).rgba;
         ''')
 
-        self.shaders_without_lut = {
+        self.basic_shaders = {
             'Mono': ImageShader(self, fragment_main='''
                                 float orig = texture(image, fs_in.texc).r;
                                 color = vec4(orig, orig, orig, 1.0);
@@ -515,12 +515,12 @@ class ImageViewerWidgetGL(QOpenGLWidget):
                                 vec3 orig = texture(image, fs_in.texc).rgb;
                                 color = vec4(orig.r, orig.g, orig.b, 1.0);
                                 '''),
-            'RGB2': self.separate_channel_no_lut_shader,
-            'RGB3': self.separate_channel_no_lut_shader,
+            'RGB2': self.separate_channel_no_cmap_shader,
+            'RGB3': self.separate_channel_no_cmap_shader,
             'Bayer': BayerShader(self, fragment_main=''),
         }
 
-        self.shaders_with_lut = {
+        self.shaders_with_cmap = {
             # Mono: use red channel in LUT
             'Mono': ImageShader(self, fragment_main='''
                                 float orig = texture(image, fs_in.texc).r;
@@ -544,28 +544,28 @@ class ImageViewerWidgetGL(QOpenGLWidget):
         self.shader = None
 
         self.gl.glClearColor(0.0, 0.0, 0.0, 0.0)
-        self.lutable = TextureAndPBO(self.gl)
-        self.select_lut(self.colormap)
+        self.lookup_table = TextureAndPBO(self.gl)
+        self.select_cmap(self.colormap)
 
         self.state = 'Initialized'
         self.gl_initialized = True
 
     def load_colormaps(self):
-        self.lutables = {}
+        self.colormaps = {}
         for key, cm in matplotlib.cm.cmap_d.items():
             if isinstance(cm, matplotlib.colors.LinearSegmentedColormap):
                 # make our own lookup table, clipping off the alpha channel
                 colors = cm(np.linspace(0.0, 1.0, 4096))[:, :3]
-                self.lutables[key] = colors.astype(np.float32)
+                self.colormaps[key] = colors.astype(np.float32)
             else:
                 colors = np.asarray(cm.colors, dtype=np.float32)
-                self.lutables[key] = colors.reshape((len(colors), 3))
+                self.colormaps[key] = colors.reshape((len(colors), 3))
 
-    def select_lut(self, key):
-        lut_data = self.lutables[key]
-        self.lutable.update(lut_data,
-                            source_format=self.gl.GL_RGB,
-                            source_type=self.gl.GL_FLOAT)
+    def select_cmap(self, key):
+        cmap_data = self.colormaps[key]
+        self.lookup_table.update(cmap_data,
+                                 source_format=self.gl.GL_RGB,
+                                 source_type=self.gl.GL_FLOAT)
         self.colormap = key
         self._update_title()
 
@@ -578,7 +578,7 @@ class ImageViewerWidgetGL(QOpenGLWidget):
                 shader_cols = 3
                 shader_rows = 3
 
-                keys = list(self.lutables.keys())
+                keys = list(self.colormaps.keys())
                 idx = keys.index(self.colormap)
                 verts = np.array(self.shader.full_screen_vertices)
                 verts[:, 0] /= shader_cols
@@ -586,13 +586,13 @@ class ImageViewerWidgetGL(QOpenGLWidget):
                 for col in range(shader_cols):
                     for row in range(shader_rows):
                         try:
-                            lut_data = self.lutables[keys[idx]]
+                            cmap_data = self.colormaps[keys[idx]]
                         except IndexError:
                             continue
 
-                        self.lutable.update(lut_data,
-                                            source_format=self.gl.GL_RGB,
-                                            source_type=self.gl.GL_FLOAT)
+                        self.lookup_table.update(cmap_data,
+                                                 source_format=self.gl.GL_RGB,
+                                                 source_type=self.gl.GL_FLOAT)
 
                         v = np.array(verts)
                         v[:, 0] += (1.0 / shader_cols) * col
@@ -608,15 +608,15 @@ class ImageViewerWidgetGL(QOpenGLWidget):
             if self.image_r is None or self.image_r.texture is None:
                 return
 
-            with bind(self.lutable.texture, self.image_r.texture,
-                      self.image_g.texture, self.image_b.texture,
-                      self.shader, args=(0, 1, 2, 3, None)):
+            with bind(self.lookup_table.texture, self.image_r.texture,
+                      self.image_g.texture, self.image_b.texture, self.shader,
+                      args=(0, 1, 2, 3, None)):
                 self.gl.glDrawArrays(self.gl.GL_TRIANGLE_STRIP, 0,
                                      len(vertices))
         else:
             if self.image is None or self.image.texture is None:
                 return
-            with bind(self.lutable.texture, self.image.texture,
+            with bind(self.lookup_table.texture, self.image.texture,
                       self.shader, args=(0, 1, None)):
                 self.gl.glDrawArrays(self.gl.GL_TRIANGLE_STRIP, 0,
                                      len(vertices))
@@ -641,17 +641,17 @@ class ImageViewerWidgetGL(QOpenGLWidget):
                                          self.shader.full_screen_vertices)
         elif event.key() in (QtCore.Qt.Key_BracketLeft,
                              QtCore.Qt.Key_BracketRight):
-            keys = list(self.lutables.keys())
+            keys = list(self.colormaps.keys())
             if event.key() == QtCore.Qt.Key_BracketRight:
                 next_idx = (keys.index(self.colormap) + 1) % len(keys)
             else:
                 next_idx = (keys.index(self.colormap) - 1) % len(keys)
             self.colormap = keys[next_idx]
-            self.select_lut(self.colormap)
+            self.select_cmap(self.colormap)
         elif event.key() == QtCore.Qt.Key_C:
             self.shader.cycle()
         elif event.key() == QtCore.Qt.Key_Space:
-            self.using_lut = not self.using_lut
+            self.using_colormap = not self.using_colormap
         else:
             return
 
