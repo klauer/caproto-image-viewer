@@ -228,6 +228,28 @@ class BayerShader(ImageShader):
                                             self.patterns[bayer_pattern])
 
 
+def grid_color_maps(full_screen_vertices, rows, cols, colormaps, starting_colormap):
+    keys = list(colormaps.keys())
+    idx = keys.index(starting_colormap)
+
+    verts = np.array(full_screen_vertices)
+    verts[:, 0] /= cols
+    verts[:, 1] /= rows
+    for col in range(cols):
+        for row in range(rows):
+            try:
+                cmap_data = colormaps[keys[idx]]
+            except IndexError:
+                continue
+
+            v = np.array(verts)
+            v[:, 0] += (1.0 / cols) * col
+            v[:, 1] += (1.0 / rows) * row
+            yield (row, col, v, cmap_data)
+            idx += 1
+
+
+
 class ImageViewerWidgetGL(QOpenGLWidget):
     '''
     Image viewer with OpenGL shader-based color mapping
@@ -238,7 +260,7 @@ class ImageViewerWidgetGL(QOpenGLWidget):
         Exit
 
     Space
-        Enable color maps
+        Disable/enable color maps
 
     P
         Enter/exit color map preview mode
@@ -247,6 +269,9 @@ class ImageViewerWidgetGL(QOpenGLWidget):
 
     []
         Cycle through color maps
+
+    -+
+        Decrease/increase amount of rows for color map preview
 
     ?
         Show this text
@@ -298,6 +323,7 @@ class ImageViewerWidgetGL(QOpenGLWidget):
             version_profile.setProfile(QtGui.QSurfaceFormat.CoreProfile)
 
         self.cmap_preview = False
+        self.preview_rows = 3
         self.format = format
         self.version_profile = version_profile
 
@@ -307,7 +333,7 @@ class ImageViewerWidgetGL(QOpenGLWidget):
         self.gl_initialized = False
         self._state = 'connecting'
         self.colormap = default_colormap
-        self.using_colormap = False
+        self.cmap_enabled = False
         self.load_colormaps()
 
         self.monitor = monitor
@@ -374,15 +400,15 @@ class ImageViewerWidgetGL(QOpenGLWidget):
 
         self.makeCurrent()
 
-        if self.using_colormap:
+        if self.cmap_enabled:
             self.shader = self.shaders_with_cmap[color_mode]
         else:
             self.shader = self.basic_shaders[color_mode]
 
-        self.shader.update(width, height, depth, color_mode, bayer_pattern)
-
         width, height, num_chan = get_image_size(
             width, height, depth, color_mode)
+
+        self.shader.update(width, height, num_chan, color_mode, bayer_pattern)
 
         if color_mode == 'RGB2':
             # TODO: this is on the slow side
@@ -557,34 +583,24 @@ class ImageViewerWidgetGL(QOpenGLWidget):
             return
 
         if self.cmap_preview:
-            with bind(self.shader.vao):
-                shader_cols = 3
-                shader_rows = 3
-
-                keys = list(self.colormaps.keys())
-                idx = keys.index(self.colormap)
-                verts = np.array(self.shader.full_screen_vertices)
-                verts[:, 0] /= shader_cols
-                verts[:, 1] /= shader_rows
-                for col in range(shader_cols):
-                    for row in range(shader_rows):
-                        try:
-                            cmap_data = self.colormaps[keys[idx]]
-                        except IndexError:
-                            continue
-
-                        self.lookup_table.update(cmap_data,
-                                                 source_format=self.gl.GL_RGB,
-                                                 source_type=self.gl.GL_FLOAT)
-
-                        v = np.array(verts)
-                        v[:, 0] += (1.0 / shader_cols) * col
-                        v[:, 1] += (1.0 / shader_rows) * row
-                        update_vertex_buffer(self.shader.vbo_vertices, v)
-                        self._draw_shader(v)
-                        idx += 1
+            self._draw_cmap_preview()
         else:
             self._draw_shader(self.shader.full_screen_vertices)
+            return
+
+    def _draw_cmap_preview(self):
+        with bind(self.shader.vao):
+            gridded = grid_color_maps(
+                self.shader.full_screen_vertices,
+                rows=self.preview_rows, cols=self.preview_rows,
+                colormaps=self.colormaps, starting_colormap=self.colormap)
+
+            for row, col, vertices, cmap_data in gridded:
+                self.lookup_table.update(cmap_data,
+                                         source_format=self.gl.GL_RGB,
+                                         source_type=self.gl.GL_FLOAT)
+                update_vertex_buffer(self.shader.vbo_vertices, vertices)
+                self._draw_shader(vertices)
 
     def _draw_shader(self, vertices):
         if self.shader.separate_channels:
@@ -612,13 +628,9 @@ class ImageViewerWidgetGL(QOpenGLWidget):
             self.close()
         elif event.key() == QtCore.Qt.Key_P:
             self.cmap_preview = not self.cmap_preview
-            if not self.cmap_preview:
-                with bind(self.shader.vao):
-                    update_vertex_buffer(self.shader.vbo_vertices,
-                                         self.shader.full_screen_vertices)
-        elif event.key() == QtCore.Qt.Key_P:
-            self.cmap_preview = not self.cmap_preview
-            if not self.cmap_preview:
+            if self.cmap_preview:
+                self.cmap_enabled = True
+            else:
                 with bind(self.shader.vao):
                     update_vertex_buffer(self.shader.vbo_vertices,
                                          self.shader.full_screen_vertices)
@@ -633,8 +645,15 @@ class ImageViewerWidgetGL(QOpenGLWidget):
             self.select_cmap(self.colormap)
         elif event.key() == QtCore.Qt.Key_C:
             self.shader.cycle()
+        elif event.key() == QtCore.Qt.Key_Minus:
+            self.preview_rows -= 1
+            self.preview_rows = max((2, self.preview_rows))
+        elif event.key() == QtCore.Qt.Key_Plus:
+            self.preview_rows += 1
+            self.preview_rows = min((5, self.preview_rows))
         elif event.key() == QtCore.Qt.Key_Space:
-            self.using_colormap = not self.using_colormap
+            self.cmap_enabled = not self.cmap_enabled
+            self.cmap_preview = False
         elif event.key() == QtCore.Qt.Key_Question:
             self.print_usage()
         else:
