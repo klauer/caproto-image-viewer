@@ -113,9 +113,11 @@ class ImageShader:
         }
     """
 
-    def __init__(self, opengl_widget, *, fragment_main, definitions=None):
+    def __init__(self, opengl_widget, *, fragment_main, definitions=None,
+                 separate_channels=False):
         self.opengl_widget = opengl_widget
         self.gl = opengl_widget.gl
+        self.separate_channels = separate_channels
 
         if definitions is not None:
             self.definitions = '\n'.join(definitions)
@@ -458,28 +460,29 @@ class ImageViewerWidgetGL(QOpenGLWidget):
 
         # Turn the 'GL_*' strings into actual enum values
         self.image_formats = {
-            format_key: getattr(self.gl, format_name)
+            format_key: getattr(gl, format_name)
             for format_key, format_name in self.image_formats.items()
         }
 
         self.basic_gl_data_types = {
-            dtype_key: getattr(self.gl, dtype_name)
+            dtype_key: getattr(gl, dtype_name)
             for dtype_key, dtype_name in self.basic_gl_data_types.items()
         }
 
         # Image texture and pixel buffer objects
-        self.image = TextureAndPBO(self.gl)
-        self.image_r = TextureAndPBO(self.gl)
-        self.image_g = TextureAndPBO(self.gl)
-        self.image_b = TextureAndPBO(self.gl)
+        self.image = TextureAndPBO(gl)
+        self.image_r = TextureAndPBO(gl)
+        self.image_g = TextureAndPBO(gl)
+        self.image_b = TextureAndPBO(gl)
 
+        channel_definitions = ['uniform highp sampler2D imageR;',
+                               'uniform highp sampler2D imageG;',
+                               'uniform highp sampler2D imageB;',
+                               ]
         self.separate_channel_no_cmap_shader = ImageShader(
             self,
-            definitions=[
-                'uniform highp sampler2D imageR;',
-                'uniform highp sampler2D imageG;',
-                'uniform highp sampler2D imageB;',
-            ],
+            separate_channels=True,
+            definitions=channel_definitions,
             fragment_main='''
                 float r = texture(imageR, fs_in.texc).r;
                 float g = texture(imageG, fs_in.texc).r;
@@ -493,11 +496,8 @@ class ImageViewerWidgetGL(QOpenGLWidget):
         #       equal weighting of RGB
         self.separate_channel_shader = ImageShader(
             self,
-            definitions=[
-                'uniform highp sampler2D imageR;',
-                'uniform highp sampler2D imageG;',
-                'uniform highp sampler2D imageB;',
-            ],
+            separate_channels=True,
+            definitions=channel_definitions,
             fragment_main='''
                 float r = texture(imageR, fs_in.texc).r;
                 float g = texture(imageG, fs_in.texc).r;
@@ -518,6 +518,7 @@ class ImageViewerWidgetGL(QOpenGLWidget):
             'RGB2': self.separate_channel_no_cmap_shader,
             'RGB3': self.separate_channel_no_cmap_shader,
             'Bayer': BayerShader(self, fragment_main=''),
+            # TODO: YUV...
         }
 
         self.shaders_with_cmap = {
@@ -539,12 +540,13 @@ class ImageViewerWidgetGL(QOpenGLWidget):
                                 float orig = dot(vec3(0.2126, 0.7152, 0.0722), color.rgb);
                                 color = texture(LUT, vec2(orig, 0.0)).rgba;
                                  '''),
+            # TODO: YUV...
         }
 
         self.shader = None
 
-        self.gl.glClearColor(0.0, 0.0, 0.0, 0.0)
-        self.lookup_table = TextureAndPBO(self.gl)
+        gl.glClearColor(0.0, 0.0, 0.0, 0.0)
+        self.lookup_table = TextureAndPBO(gl)
         self.select_cmap(self.colormap)
 
         self.state = 'Initialized'
@@ -604,7 +606,7 @@ class ImageViewerWidgetGL(QOpenGLWidget):
             self._draw_shader(self.shader.full_screen_vertices)
 
     def _draw_shader(self, vertices):
-        if self.shader.definitions:
+        if self.shader.separate_channels:
             if self.image_r is None or self.image_r.texture is None:
                 return
 
