@@ -324,6 +324,7 @@ class ImageViewerWidgetGL(QOpenGLWidget):
         self.gl_initialized = False
         self._state = 'connecting'
         self.colormap = default_colormap
+        self.using_lut = False
         self.load_colormaps()
 
         self.monitor = monitor
@@ -389,8 +390,12 @@ class ImageViewerWidgetGL(QOpenGLWidget):
             raise RuntimeError('TODO')
 
         self.makeCurrent()
-        # self.shader = self.shaders_without_lut[color_mode]
-        self.shader = self.shaders_with_lut[color_mode]
+
+        if self.using_lut:
+            self.shader = self.shaders_with_lut[color_mode]
+        else:
+            self.shader = self.shaders_without_lut[color_mode]
+
         self.shader.update(width, height, depth, color_mode, bayer_pattern)
 
         width, height, num_chan = get_image_size(
@@ -645,3 +650,9 @@ class ImageViewerWidgetGL(QOpenGLWidget):
             self.select_lut(self.colormap)
         elif event.key() == QtCore.Qt.Key_C:
             self.shader.cycle()
+        elif event.key() == QtCore.Qt.Key_Space:
+            self.using_lut = not self.using_lut
+        else:
+            return
+
+        self.update()
