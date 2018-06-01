@@ -1,5 +1,4 @@
 import numpy as np
-import argparse
 
 
 def get_image_size(width, height, depth, color_mode):
