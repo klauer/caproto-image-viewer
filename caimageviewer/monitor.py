@@ -1,9 +1,11 @@
 import time
 import threading
 
+import numpy as np
 import caproto as ca
 
 from PyQt5.QtCore import QThread, pyqtSignal
+from PyQt5 import QtGui
 from caproto import ChannelType
 
 
@@ -213,7 +215,47 @@ class ImageMonitorPyepics(ImageMonitor):
         self.stop_event.wait()
 
 
+class ImageMonitorStatic(ImageMonitor):
+    def _run(self):
+        self.filename = self.prefix
+        image = QtGui.QImage(self.filename)
+        image = image.convertToFormat(QtGui.QImage.Format_Grayscale8)
+
+        width = image.width()
+        height = image.height()
+        image.__array_interface__ = {
+            'shape': (height, width),
+            'typestr': '|u1',
+            'data': image.bits().asarray(size=width * height),
+            'strides': (image.bytesPerLine(), 1),
+            'version': 3,
+        }
+
+        data = np.ascontiguousarray(image, dtype=np.uint8)
+        data = data.reshape(height, width)
+
+        depth = 1
+        color_mode = 'Bayer'
+        bayer_pattern = 'RGGB'
+
+        self.new_image_size.emit(width, height, depth, color_mode,
+                                 bayer_pattern)
+
+        print(f'width: {width} height: {height} depth: {depth} '
+              f'color_mode: {color_mode}')
+
+        if self.barrier is not None:
+            # Synchronize with image viewer widget, if necessary
+            self.barrier.wait()
+
+        while not self.stop_event.is_set():
+            self.new_image.emit(time.time(), width, height, depth, color_mode,
+                                bayer_pattern, ChannelType.CHAR, data)
+            time.sleep(0.1)
+
+
 backends = {'sync': ImageMonitorSync,
             'threaded': ImageMonitorThreaded,
             'pyepics': ImageMonitorPyepics,
+            'static': ImageMonitorStatic,
             }
