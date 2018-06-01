@@ -270,6 +270,28 @@ class BayerShader(ImageShader):
 
 
 class ImageViewerWidgetGL(QOpenGLWidget):
+    '''
+    Image viewer with OpenGL shader-based color mapping
+
+    Keys
+    ----
+    Escape
+        Exit
+
+    Space
+        Enable color maps
+
+    P
+        Enter/exit color map preview mode
+        Shows 3x3 grid of image with different color maps applied.
+        Use [ and ] to cycle through color maps.
+
+    []
+        Cycle through color maps
+
+    ?
+        Show this text
+    '''
     basic_gl_data_types = {
         ChannelType.CHAR: 'GL_UNSIGNED_BYTE',
         ChannelType.INT: 'GL_UNSIGNED_SHORT',
@@ -654,7 +676,13 @@ class ImageViewerWidgetGL(QOpenGLWidget):
             self.shader.cycle()
         elif event.key() == QtCore.Qt.Key_Space:
             self.using_colormap = not self.using_colormap
+        elif event.key() == QtCore.Qt.Key_Question:
+            self.print_usage()
         else:
             return
 
         self.update()
+
+    def print_usage(self):
+        # TODO: this is a GUI... isn't it?
+        print(self.__doc__)
