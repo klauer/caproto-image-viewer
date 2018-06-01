@@ -1,5 +1,4 @@
 from distutils.core import setup
-import glob
 import setuptools  # noqa F401
 import versioneer
 
@@ -15,7 +14,7 @@ classifiers = [
 ]
 
 
-setup(name='caproto-image-viewer',
+setup(name='caimageviewer',
       version=versioneer.get_version(),
       cmdclass=versioneer.get_cmdclass(),
       description='caproto AreaDetector image viewer',
@@ -23,7 +22,7 @@ setup(name='caproto-image-viewer',
                 ],
       entry_points={
           'console_scripts': [
-              'caimageviewer = caimageviewer.__main__:main',
+              'caproto-image-viewer = caimageviewer.__main__:main',
           ]
       },
       package_data={'caimageviewer': ['*.fs', '*.vs']},
