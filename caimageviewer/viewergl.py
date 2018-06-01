@@ -298,59 +298,6 @@ class ImageViewerWidgetGL(QOpenGLWidget):
         # 'YUV421': (np., 'GL_RED', 'GL_UNSIGNED_BYTE'),
     }
 
-    vertex_source = """\
-        #version 410 core
-
-        in vec3 position;
-        in vec2 texCoord;
-        uniform mat4 mvp;
-
-        // Output of vertex shader stage, to fragment shader:
-        out VS_OUT
-        {
-                vec2 texc;
-        } vs_out;
-
-        void main(void)
-        {
-            gl_Position = mvp * vec4(position, 1.0);
-            vs_out.texc = texCoord;
-        }
-"""
-
-    fragment_source = """\
-        #version 410 core
-
-        uniform highp sampler2D image;
-        uniform highp sampler2D LUT;
-        layout(location=0, index=0) out vec4 fragColor;
-
-        // Input from vertex shader stage
-        in VS_OUT
-        {
-            vec2 texc;
-        } fs_in;
-
-        // Output is a color for each pixel
-        out vec4 color;
-
-        void main(void)
-        {
-            // 1. original value would give a black and white image
-            // float orig = texture(image, fs_in.texc).r;
-            // color = vec4(orig, 0.0, 0.0, 1.0);
-
-            // 2. simple texture() lookup
-            float orig = texture(image, fs_in.texc).r;
-            color = texture(LUT, vec2(orig, 0.0)).rgba;
-
-            // 3. texelFetch (doesn't work)
-            // float orig = texture(image, fs_in.texc).r;
-            // int coord = int(orig * 255);
-            // color = texelFetch(LUT, vec2(coord, 0)).rgba;
-        }
-"""
-
     def __init__(self, monitor, *, format=None, version_profile=None,
                  default_colormap='viridis'):
         self.prefix = monitor.prefix
