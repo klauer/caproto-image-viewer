@@ -377,10 +377,27 @@ class BayerShader(ImageShader):
                 self.shader.setUniformValue('firstRed',
                                             self.patterns[bayer_pattern])
 
-        # TODO need a shader to support Bayer and YUV formats.
 
-        # Bayer pattern image, 1 value per pixel, with color filter on detector
-        # 'Bayer': (np.uint8, 'GL_RED', 'GL_UNSIGNED_BYTE'),
+class ImageViewerWidget(QOpenGLWidget):
+    basic_gl_data_types = {
+        ChannelType.CHAR: 'GL_UNSIGNED_BYTE',
+        ChannelType.INT: 'GL_UNSIGNED_SHORT',
+        ChannelType.LONG: 'GL_UNSIGNED_INT',
+        ChannelType.FLOAT: 'GL_FLOAT',
+        ChannelType.DOUBLE: 'GL_DOUBLE',
+    }
+
+    image_formats = {
+        # Monochromatic image
+        'Mono': 'GL_RED',
+        # RGB image with pixel color interleave, data array is [3, NX, NY]
+        'RGB1': 'GL_RGB',
+        # RGB image with line/row color interleave, data array is [NX, 3, NY]
+        'RGB2': 'GL_RGB',
+        # RGB image with plane color interleave, data array is [NX, NY, 3]
+        'RGB3': 'GL_RGB',
+        # Bayer
+        'Bayer': 'GL_RED',
 
         # # YUV image, 3 bytes encodes 1 RGB pixel
         # 'YUV444': (np., 'GL_RED', 'GL_UNSIGNED_BYTE'),
@@ -390,17 +407,6 @@ class BayerShader(ImageShader):
 
         # # YUV image, 6 bytes encodes 4 RGB pixels
         # 'YUV421': (np., 'GL_RED', 'GL_UNSIGNED_BYTE'),
-    }
-
-    bayer_patterns = {
-        # First line RGRG, second line GBGB...
-        "RGGB": '',
-        # First line GBGB, second line RGRG...
-        "GBRG": '',
-        # First line GRGR, second line BGBG...
-        "GRBG": '',
-        # First line BGBG, second line GRGR...
-        "BGGR": '',
     }
 
     vertex_src = """\
@@ -472,28 +478,25 @@ class BayerShader(ImageShader):
             version_profile.setVersion(4, 1)
             version_profile.setProfile(QtGui.QSurfaceFormat.CoreProfile)
 
+        self.cmap_preview = False
         self.format = format
         self.version_profile = version_profile
 
         super().__init__()
 
         self.image_times = []
-
+        self.gl_initialized = False
+        self._state = 'connecting'
+        self.colormap = default_colormap
         self.load_colormaps()
 
-        # self.init_barrier = threading.Barrier(2)
         self.monitor = monitor
         self.monitor.new_image_size.connect(self.image_resized)
         self.monitor.new_image.connect(self.display_image)
         self.monitor.errored.connect(self.monitor_errored)
         self.monitor.start()
 
-        self.gl_initialized = False
-
-        self._state = 'connecting'
-        self.colormap = default_colormap
-
-        assert default_colormap in self.lutables
+        assert self.colormap in self.lutables
         self.title = ''
 
     @property
@@ -531,7 +534,10 @@ class BayerShader(ImageShader):
 
     @pyqtSlot(int, int, int, str, str)
     def image_resized(self, width, height, depth, color_mode, bayer_pattern):
-        width, height = get_image_size(width, height, depth, color_mode)
+        width, height, depth = get_image_size(width, height, depth, color_mode)
+        if width == 0 or height == 0:
+            return
+
         self.resize(width, height)
 
     @pyqtSlot(float, int, int, int, str, str, object, object)
@@ -540,20 +546,53 @@ class BayerShader(ImageShader):
         if not self.gl_initialized:
             return
 
-        format, type_ = self.image_formats[(color_mode, dtype)]
-
-        width, height, depth = get_array_dimensions(width, height, depth,
-                                                    color_mode)
-        array_data = array_data.reshape((width, height, depth))
+        if color_mode in ('Mono', 'RGB1', 'RGB2', 'RGB3', 'Bayer'):
+            gl_data_type = self.basic_gl_data_types[dtype]
+            format = self.image_formats[color_mode]
+        else:
+            raise RuntimeError('TODO')
 
         self.makeCurrent()
-        self.mapped_image = initialize_pbo(self.image_pbo, array_data,
-                                           mapped_array=self.mapped_image)
-        update_pbo_texture(self.gl, self.image_pbo, self.image_texture,
-                           array_data=array_data,
-                           texture_format=self.gl.GL_RGB32F,
-                           source_format=format,
-                           source_type=type_)
+        # self.shader = self.shaders_without_lut[color_mode]
+        self.shader = self.shaders_with_lut[color_mode]
+        self.shader.update(width, height, depth, color_mode, bayer_pattern)
+
+        width, height, num_chan = get_image_size(
+            width, height, depth, color_mode)
+
+        if color_mode == 'RGB2':
+            # TODO: this is on the slow side
+            array_data = array_data.reshape((width, 3, height))
+            rdata = np.ascontiguousarray(array_data[:, 0, :])
+            gdata = np.ascontiguousarray(array_data[:, 1, :])
+            bdata = np.ascontiguousarray(array_data[:, 2, :])
+            for chunk, pbo in zip((rdata, gdata, bdata),
+                                  (self.image_r,
+                                   self.image_g,
+                                   self.image_b)):
+                pbo.update(chunk.reshape(width, height),
+                           source_format=self.gl.GL_RED,
+                           source_type=gl_data_type,
+                           )
+        elif color_mode == 'RGB3':
+            # But this is quite fast
+            chunk_size = width * height
+            data_and_pbo = ((array_data[:chunk_size],
+                             self.image_r),
+                            (array_data[chunk_size:2 * chunk_size],
+                             self.image_g),
+                            (array_data[2 * chunk_size:],
+                             self.image_b))
+            for chunk, pbo in data_and_pbo:
+                pbo.update(chunk.reshape(width, height),
+                           source_format=self.gl.GL_RED,
+                           source_type=gl_data_type,
+                           )
+        else:
+            # Otherwise, it's an easily supported format (RGB888, Mono...)
+            array_data = array_data.reshape((width, height * num_chan))
+            self.image.update(array_data, source_format=format, source_type=gl_data_type)
+
         self.update()
 
         if not len(self.image_times) and (time.time() - frame_timestamp > 1):
@@ -578,73 +617,94 @@ class BayerShader(ImageShader):
 
         # Turn the 'GL_*' strings into actual enum values
         self.image_formats = {
-            format_key: [getattr(gl, name) for name in format_values]
-            for format_key, format_values in self.image_formats.items()
+            format_key: getattr(self.gl, format_name)
+            for format_key, format_name in self.image_formats.items()
         }
 
-        # Image texture - pixel buffer object used to map memory to this
-        self.image_texture = QOpenGLTexture(QOpenGLTexture.Target2D)
-        self.image_texture.allocateStorage()
+        self.basic_gl_data_types = {
+            dtype_key: getattr(self.gl, dtype_name)
+            for dtype_key, dtype_name in self.basic_gl_data_types.items()
+        }
 
-        # Pixel buffer object used to do fast copies to GPU memory
-        self.image_pbo = QOpenGLBuffer(QOpenGLBuffer.PixelUnpackBuffer)
-        self.image_pbo.setUsagePattern(QOpenGLBuffer.StreamDraw)
-        self.mapped_image = None  # to be mapped later when size is determined
+        # Image texture and pixel buffer objects
+        self.image = TextureAndPBO(self.gl)
+        self.image_r = TextureAndPBO(self.gl)
+        self.image_g = TextureAndPBO(self.gl)
+        self.image_b = TextureAndPBO(self.gl)
 
-        self.shader = QtGui.QOpenGLShaderProgram(self)
-        self.shader.addShaderFromSourceCode(QtGui.QOpenGLShader.Vertex,
-                                            self.vertex_src)
-        self.shader.addShaderFromSourceCode(QtGui.QOpenGLShader.Fragment,
-                                            self.fragment_src)
-        self.shader.link()
+        self.separate_channel_no_lut_shader = ImageShader(
+            self,
+            definitions=[
+                'uniform highp sampler2D imageR;',
+                'uniform highp sampler2D imageG;',
+                'uniform highp sampler2D imageB;',
+            ],
+            fragment_main='''
+                float r = texture(imageR, fs_in.texc).r;
+                float g = texture(imageG, fs_in.texc).r;
+                float b = texture(imageB, fs_in.texc).r;
+                color = vec4(r, g, b, 1.0);
+        ''')
 
-        with bind(self.shader):
-            self.matrix = QtGui.QMatrix4x4()
-            self.matrix.ortho(0, 1,  # left-right
-                              1, 0,  # top-bottom
-                              0, 1)  # near-far
-            self.shader.setUniformValue("mvp", self.matrix)
+        # TODO: using grayscale conversion according to:
+        #           https://en.wikipedia.org/wiki/Grayscale#cite_ref-5
+        #       but it may be desirable in scientific applications (?) to use
+        #       equal weighting of RGB
+        self.separate_channel_shader = ImageShader(
+            self,
+            definitions=[
+                'uniform highp sampler2D imageR;',
+                'uniform highp sampler2D imageG;',
+                'uniform highp sampler2D imageB;',
+            ],
+            fragment_main='''
+                float r = texture(imageR, fs_in.texc).r;
+                float g = texture(imageG, fs_in.texc).r;
+                float b = texture(imageB, fs_in.texc).r;
+                float orig = dot(vec3(0.2126, 0.7152, 0.0722), vec3(r, g, b));
+                color = texture(LUT, vec2(orig, 0.0)).rgba;
+        ''')
 
-            # image: texture unit 0
-            self.shader.setUniformValue('image', 0)
-            # LUT: texture unit 1
-            self.shader.setUniformValue('LUT', 1)
+        self.shaders_without_lut = {
+            'Mono': ImageShader(self, fragment_main='''
+                                float orig = texture(image, fs_in.texc).r;
+                                color = vec4(orig, orig, orig, 1.0);
+                                '''),
+            'RGB1': ImageShader(self, fragment_main='''
+                                vec3 orig = texture(image, fs_in.texc).rgb;
+                                color = vec4(orig.r, orig.g, orig.b, 1.0);
+                                '''),
+            'RGB2': self.separate_channel_no_lut_shader,
+            'RGB3': self.separate_channel_no_lut_shader,
+            'Bayer': BayerShader(self, fragment_main=''),
+        }
 
-        # Vertices for rendering to screen
-        self.vao_offscreen = QtGui.QOpenGLVertexArrayObject(self)
-        self.vao_offscreen.create()
-        self.vao = QtGui.QOpenGLVertexArrayObject(self)
-        self.vao.create()
+        self.shaders_with_lut = {
+            # Mono: use red channel in LUT
+            'Mono': ImageShader(self, fragment_main='''
+                                float orig = texture(image, fs_in.texc).r;
+                                color = texture(LUT, vec2(orig, 0.0)).rgba;
+                                '''),
+            # RGB: use equally weighted values for lookup
+            'RGB1': ImageShader(self, fragment_main='''
+                                vec3 rgb = texture(image, fs_in.texc).rgb;
+                                float orig = dot(vec3(0.2126, 0.7152, 0.0722), rgb);
+                                color = texture(LUT, vec2(orig, 0.0)).rgba;
+                                '''),
+            'RGB2': self.separate_channel_shader,
+            'RGB3': self.separate_channel_shader,
+            # Bayer is special - filter the pre-calculated color
+            'Bayer': BayerShader(self, fragment_main='''
+                                float orig = dot(vec3(0.2126, 0.7152, 0.0722), color.rgb);
+                                color = texture(LUT, vec2(orig, 0.0)).rgba;
+                                 '''),
+        }
 
-        with bind(self.vao):
-            self.vertices = [(0.0, 0.0, 0.0),
-                             (1.0, 0.0, 0.0),
-                             (0.0, 1.0, 0.0),
-                             (1.0, 1.0, 0.0),
-                             ]
+        self.shader = None
 
-            self.vbo_vertices = setup_vertex_buffer(
-                gl, data=self.vertices, shader=self.shader,
-                shader_variable="position")
-
-            self.tex = [(0.0, 0.0),
-                        (1.0, 0.0),
-                        (0.0, 1.0),
-                        (1.0, 1.0),
-                        ]
-            self.vbo_tex = setup_vertex_buffer(
-                gl, data=self.tex, shader=self.shader,
-                shader_variable="texCoord")
-
-        gl.glClearColor(0.0, 1.0, 0.0, 0.0)
-
-        self.lut_texture = QOpenGLTexture(QOpenGLTexture.Target2D)
-        self.lut_texture.allocateStorage()
-
+        self.gl.glClearColor(0.0, 0.0, 0.0, 0.0)
+        self.lutable = TextureAndPBO(self.gl)
         self.select_lut(self.colormap)
-
-        print('OpenGL initialized')
-        # self.init_barrier.wait()
 
         self.state = 'Initialized'
         self.gl_initialized = True
@@ -653,37 +713,72 @@ class BayerShader(ImageShader):
         self.lutables = {}
         for key, cm in matplotlib.cm.cmap_d.items():
             if isinstance(cm, matplotlib.colors.LinearSegmentedColormap):
-                continue
-                # cm = matplotlib.colors.from_levels_and_colors(
-                #     levels=range(256),
-                #     colors=)
-
-            colors = np.asarray(cm.colors, dtype=np.float32)
-            self.lutables[key] = colors.reshape((len(colors), 1, 3))
+                # make our own lookup table, clipping off the alpha channel
+                colors = cm(np.linspace(0.0, 1.0, 4096))[:, :3]
+                self.lutables[key] = colors.astype(np.float32)
+            else:
+                colors = np.asarray(cm.colors, dtype=np.float32)
+                self.lutables[key] = colors.reshape((len(colors), 3))
 
     def select_lut(self, key):
         lut_data = self.lutables[key]
-
-        lut_pbo = QOpenGLBuffer(QOpenGLBuffer.PixelUnpackBuffer)
-        lut_pbo.setUsagePattern(QOpenGLBuffer.StreamDraw)
-        initialize_pbo(lut_pbo, data=lut_data)
-        update_pbo_texture(self.gl, lut_pbo, self.lut_texture,
-                           array_data=lut_data,
-                           texture_format=self.gl.GL_RGB32F,
-                           source_format=self.gl.GL_RGB,
-                           source_type=self.gl.GL_FLOAT)
+        self.lutable.update(lut_data,
+                            source_format=self.gl.GL_RGB,
+                            source_type=self.gl.GL_FLOAT)
         self.colormap = key
         self._update_title()
 
     def paintGL(self):
-        if self.image_texture is None:
+        if self.shader is None:
             return
 
-        with bind(self.image_texture, args=(0, )):  # bind to 'image'
-            with bind(self.lut_texture, args=(1, )):  # bind to 'LUT'
-                with bind(self.shader, self.vao):
-                    self.gl.glDrawArrays(self.gl.GL_TRIANGLE_STRIP, 0,
-                                         len(self.vertices))
+        if self.cmap_preview:
+            with bind(self.shader.vao):
+                shader_cols = 3
+                shader_rows = 3
+
+                keys = list(self.lutables.keys())
+                idx = keys.index(self.colormap)
+                verts = np.array(self.shader.full_screen_vertices)
+                verts[:, 0] /= shader_cols
+                verts[:, 1] /= shader_rows
+                for col in range(shader_cols):
+                    for row in range(shader_rows):
+                        try:
+                            lut_data = self.lutables[keys[idx]]
+                        except IndexError:
+                            continue
+
+                        self.lutable.update(lut_data,
+                                            source_format=self.gl.GL_RGB,
+                                            source_type=self.gl.GL_FLOAT)
+
+                        v = np.array(verts)
+                        v[:, 0] += (1.0 / shader_cols) * col
+                        v[:, 1] += (1.0 / shader_rows) * row
+                        update_vertex_buffer(self.shader.vbo_vertices, v)
+                        self._draw_shader(v)
+                        idx += 1
+        else:
+            self._draw_shader(self.shader.full_screen_vertices)
+
+    def _draw_shader(self, vertices):
+        if self.shader.definitions:
+            if self.image_r is None or self.image_r.texture is None:
+                return
+
+            with bind(self.lutable.texture, self.image_r.texture,
+                      self.image_g.texture, self.image_b.texture,
+                      self.shader, args=(0, 1, 2, 3, None)):
+                self.gl.glDrawArrays(self.gl.GL_TRIANGLE_STRIP, 0,
+                                     len(vertices))
+        else:
+            if self.image is None or self.image.texture is None:
+                return
+            with bind(self.lutable.texture, self.image.texture,
+                      self.shader, args=(0, 1, None)):
+                self.gl.glDrawArrays(self.gl.GL_TRIANGLE_STRIP, 0,
+                                     len(vertices))
 
     def resizeGL(self, w, h):
         self.gl.glViewport(0, 0, w, max(h, 1))
