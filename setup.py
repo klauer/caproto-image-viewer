@@ -14,18 +14,22 @@ classifiers = [
 ]
 
 
-setup(name='caimageviewer',
-      version=versioneer.get_version(),
-      cmdclass=versioneer.get_cmdclass(),
-      description='caproto AreaDetector image viewer',
-      packages=['caimageviewer',
-                ],
-      entry_points={
-          'console_scripts': [
-              'caproto-image-viewer = caimageviewer.__main__:main',
-          ]
-      },
-      package_data={'caimageviewer': ['*.fs', '*.vs']},
-      python_requires='>=3.6',
-      classifiers=classifiers
-      )
+standard_requirements = ['PyQt5', 'numpy', 'caproto']
+
+setup(
+    name='caimageviewer',
+    version=versioneer.get_version(),
+    cmdclass=versioneer.get_cmdclass(),
+    description='caproto AreaDetector image viewer',
+    packages=['caimageviewer',
+              ],
+    entry_points={
+        'console_scripts': [
+            'caproto-image-viewer = caimageviewer.__main__:main',
+        ]
+    },
+    package_data={'caimageviewer': ['*.fs', '*.vs']},
+    python_requires='>=3.6',
+    classifiers=classifiers,
+    install_requires=standard_requirements,
+)
