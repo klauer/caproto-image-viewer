@@ -45,13 +45,19 @@ def show_statistics(image_times, *, plot_times=True):
 
     fig, ax1 = plt.subplots(1, 1)
 
-    max_range = min((0.5, avg_frame * 15))
-    bins = int(max_range / 0.002)  # 2ms bins
+    ioc_to_screen_latency = (display_times - frame_times)
+    frame_to_frame_time = np.diff(display_times)
 
-    ax1.hist((display_times - frame_times), label='IOC to screen latency',
+    max_range = np.max((ioc_to_screen_latency.max(),
+                        frame_to_frame_time.max()))
+    bins = int(max_range / 0.002)  # 2ms bins
+    if bins > 200:
+        bins = 200
+
+    ax1.hist(ioc_to_screen_latency, label='IOC to screen latency',
              alpha=0.5, range=(0.0, max_range), bins=bins,
              )
-    ax1.hist(np.diff(display_times), label='Frame-to-frame', alpha=0.5,
+    ax1.hist(frame_to_frame_time, label='Frame-to-frame', alpha=0.5,
              range=(0.0, max_range),
              bins=bins,
              )

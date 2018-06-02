@@ -18,6 +18,8 @@ def main():
     parser.add_argument('--backend', type=str, default='threaded',
                         choices=['threaded', 'pyepics', 'sync', 'static'],
                         help='caproto backend to use')
+    parser.add_argument('--stats', default=False, action='store_true',
+                        help='Show image display statistics on exit')
 
     # --gl
     group = parser.add_mutually_exclusive_group(required=False)
@@ -50,7 +52,7 @@ def main():
     monitor_cls = monitor.backends[args.backend]
     mon = monitor_cls(prefix=args.prefix, cam=args.cam, image=args.image,
                       acquire=args.acquire)
-    widget = ImageViewerWidget(mon)
+    widget = ImageViewerWidget(mon, show_statistics=args.stats)
 
     widget.show()
     sys.exit(app.exec_())

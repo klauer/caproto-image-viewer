@@ -274,7 +274,6 @@ def grid_color_maps(full_screen_vertices, rows, cols, colormaps, starting_colorm
             idx += 1
 
 
-
 class ImageViewerWidgetGL(QOpenGLWidget):
     '''
     Image viewer with OpenGL shader-based color mapping
@@ -332,8 +331,9 @@ class ImageViewerWidgetGL(QOpenGLWidget):
     }
 
     def __init__(self, monitor, *, format=None, version_profile=None,
-                 default_colormap='viridis'):
+                 show_statistics=False, default_colormap='viridis'):
         self.prefix = monitor.prefix
+        self.show_statistics = show_statistics
 
         if format is None:
             format = QtGui.QSurfaceFormat()
@@ -396,7 +396,7 @@ class ImageViewerWidgetGL(QOpenGLWidget):
     def closeEvent(self, event):
         self.monitor.stop()
         event.accept()
-        if self.image_times:
+        if self.show_statistics and self.image_times:
             show_statistics(self.image_times)
 
     @pyqtSlot(Exception)

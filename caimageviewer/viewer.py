@@ -13,9 +13,10 @@ logger = logging.getLogger(__name__)
 
 
 class ImageViewerWidget(QWidget):
-    def __init__(self, monitor, parent=None):
+    def __init__(self, monitor, *, show_statistics=False, parent=None):
         super().__init__(parent=parent)
 
+        self.show_statistics = show_statistics
         self.layout = QVBoxLayout()
         self.status_label = QLabel('Status')
         self.layout.addWidget(self.status_label)
@@ -42,7 +43,7 @@ class ImageViewerWidget(QWidget):
     def closeEvent(self, event):
         self.monitor.stop()
         event.accept()
-        if self.image_times:
+        if self.show_statistics and self.image_times:
             show_statistics(self.image_times)
 
     @pyqtSlot(Exception)
