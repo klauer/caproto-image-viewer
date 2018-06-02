@@ -1,9 +1,6 @@
 import time
 import logging
 
-import matplotlib
-import matplotlib.cm
-
 import numpy as np
 from collections import namedtuple
 
@@ -25,6 +22,34 @@ logger = logging.getLogger(__name__)
 ImageType = namedtuple('ImageStats',
                        'width height depth color_mode bayer_pattern')
 
+
+def load_colormaps(include_all=True):
+    try:
+        import matplotlib as mpl
+        import matplotlib.cm
+        linear_segmented = matplotlib.colors.LinearSegmentedColormap
+        cmaps = matplotlib.cm.cmap_d
+        raise ImportError
+    except (ImportError, AttributeError):
+        from .cmap import cmaps
+        mpl = None
+        linear_segmented = None
+
+    colormaps = {}
+    for key, cm in cmaps.items():
+        if mpl is not None and isinstance(cm, linear_segmented):
+            if not include_all:
+                return
+            # make our own lookup table, clipping off the alpha channel
+            colors = cm(np.linspace(0.0, 1.0, 4096))[:, :3]
+            colormaps[key] = colors.astype(np.float32)
+        elif isinstance(cm, np.ndarray):
+            colormaps[key] = cm
+        else:
+            colors = np.asarray(cm.colors, dtype=np.float32)
+            colormaps[key] = colors.reshape((len(colors), 3))
+
+    return colormaps
 
 class TextureAndPBO:
     'Container for texture and pixel buffer object'
@@ -334,7 +359,7 @@ class ImageViewerWidgetGL(QOpenGLWidget):
         self._state = 'connecting'
         self.colormap = default_colormap
         self.cmap_enabled = False
-        self.load_colormaps()
+        self.colormaps = load_colormaps()
 
         self.monitor = monitor
         self.monitor.new_image_size.connect(self.image_resized)
@@ -564,17 +589,6 @@ class ImageViewerWidgetGL(QOpenGLWidget):
 
         self.state = 'Initialized'
         self.gl_initialized = True
-
-    def load_colormaps(self):
-        self.colormaps = {}
-        for key, cm in matplotlib.cm.cmap_d.items():
-            if isinstance(cm, matplotlib.colors.LinearSegmentedColormap):
-                # make our own lookup table, clipping off the alpha channel
-                colors = cm(np.linspace(0.0, 1.0, 4096))[:, :3]
-                self.colormaps[key] = colors.astype(np.float32)
-            else:
-                colors = np.asarray(cm.colors, dtype=np.float32)
-                self.colormaps[key] = colors.reshape((len(colors), 3))
 
     def select_cmap(self, key):
         cmap_data = self.colormaps[key]
