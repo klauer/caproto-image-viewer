@@ -453,10 +453,16 @@ class ImageViewerWidgetGL(QOpenGLWidget):
                                  array_data.nbytes))
 
     def initializeGL(self):
-        self.gl = self.context().versionFunctions(self.version_profile)
-        assert self.gl is not None
+        gl = self.context().versionFunctions(self.version_profile)
+        if gl is None:
+            raise RuntimeError('This version of OpenGL is not supported '
+                               '(PyQt5/OpenGL ES?)')
+            # Could happen if:
+            #   - hardware is not supported
+            #   - OpenGL ES is used and PyQt5 still doesn't support it with
+            #     versionFunctions
 
-        gl = self.gl
+        self.gl = gl
 
         print('-------------------------------------------------------------')
         print("GL version :", gl.glGetString(gl.GL_VERSION))
