@@ -109,8 +109,8 @@ class ImageMonitorSync(ImageMonitor):
 class ImageMonitorThreaded(ImageMonitor):
     def _run(self):
         from caproto.threading.client import Context, SharedBroadcaster
-        broadcaster = SharedBroadcaster(log_level='INFO')
-        context = Context(broadcaster, log_level='INFO')
+        broadcaster = SharedBroadcaster()
+        context = Context(broadcaster)
 
         self.pvs = {key: pv for key, pv in
                     zip(self.pvs, context.get_pvs(*self.pvs.values()))
