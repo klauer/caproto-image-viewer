@@ -93,10 +93,11 @@ $ caproto-image-viewer 13SIM1: --acquire
 Speed
 =====
 
-The OpenGL version is very fast. Basic testing has shown:
-    * Minimal IOC-to-screen latency
-    * Displays 200Hz, 1MP 8-bit images with real-time color-mapping
-    * Utilizes ~40% of one core in a 4-core system
+The OpenGL display widget is very fast. Basic testing has shown:
+
+* Minimal IOC-to-screen latency
+* Displays 200Hz, 1MP 8-bit images with real-time color-mapping
+* Utilizes ~40% of one core in a 4-core system
 
 Though the viewer is capable of doing this with ease, you probably shouldn't
 saturate your network viewing things at such a high frame rate unnecessarily.
