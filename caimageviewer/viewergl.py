@@ -347,6 +347,7 @@ class ImageViewerWidgetGL(QOpenGLWidget):
                  show_statistics=False, default_colormap='viridis'):
         self.prefix = monitor.prefix
         self.show_statistics = show_statistics
+        self._statistics_shown = False
 
         if format is None:
             format = QtGui.QSurfaceFormat()
@@ -410,7 +411,9 @@ class ImageViewerWidgetGL(QOpenGLWidget):
         self.monitor.stop()
         event.accept()
         if self.show_statistics and self.image_times:
-            show_statistics(self.image_times)
+            if not self._statistics_shown:
+                show_statistics(self.image_times)
+                self._statistics_shown = True
 
     @pyqtSlot(Exception)
     def monitor_errored(self, ex):
