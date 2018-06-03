@@ -660,6 +660,11 @@ class ImageViewerWidgetGL(QOpenGLWidget):
     def resizeGL(self, w, h):
         self.gl.glViewport(0, 0, w, max(h, 1))
 
+    def _set_fullscreen_vertices(self):
+        with bind(self.shader.vao):
+            update_vertex_buffer(self.shader.vbo_vertices,
+                                 self.shader.full_screen_vertices)
+
     def keyPressEvent(self, event):
         if event.key() == QtCore.Qt.Key_Escape:
             self.close()
@@ -668,9 +673,8 @@ class ImageViewerWidgetGL(QOpenGLWidget):
             if self.cmap_preview:
                 self.cmap_enabled = True
             else:
-                with bind(self.shader.vao):
-                    update_vertex_buffer(self.shader.vbo_vertices,
-                                         self.shader.full_screen_vertices)
+                self._set_fullscreen_vertices()
+
         elif event.key() in (QtCore.Qt.Key_BracketLeft,
                              QtCore.Qt.Key_BracketRight):
             keys = list(self.colormaps.keys())
@@ -690,7 +694,9 @@ class ImageViewerWidgetGL(QOpenGLWidget):
             self.preview_rows = min((5, self.preview_rows))
         elif event.key() == QtCore.Qt.Key_Space:
             self.cmap_enabled = not self.cmap_enabled
-            self.cmap_preview = False
+            if self.cmap_preview:
+                self.cmap_preview = False
+                self._set_fullscreen_vertices()
         elif event.key() == QtCore.Qt.Key_Question:
             self.print_usage()
         else:
