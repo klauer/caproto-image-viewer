@@ -1,4 +1,5 @@
 import time
+import sys
 import logging
 
 import numpy as np
@@ -12,7 +13,7 @@ from PyQt5.QtGui import QOpenGLBuffer
 
 from .util import (show_statistics, get_image_size)
 
-from .gl_util import (bind, setup_vertex_buffer, initialize_pbo,
+from .gl_util import (bind, setup_vertex_buffer, copy_data_to_pbo,
                       update_pbo_texture, update_vertex_buffer)
 from caproto import ChannelType
 
@@ -53,7 +54,7 @@ def load_colormaps(include_all=True):
 
 class TextureAndPBO:
     'Container for texture and pixel buffer object'
-    def __init__(self, gl, *, usage=QOpenGLBuffer.StreamDraw,
+    def __init__(self, gl, *, usage=QOpenGLBuffer.DynamicDraw,
                  texture_format='GL_RGB32F'):
         self.gl = gl
 
@@ -75,14 +76,25 @@ class TextureAndPBO:
 
     def update(self, data, source_format, source_type, *,
                copy_to_texture=True, num_channels=1):
+
+        if data.dtype.name == 'float64':
+            # See note above: glTexImage2D does not support f8
+            data = np.ascontiguousarray(data, dtype=np.float32)
+        elif not data.dtype.isnative and data.itemsize > 1:
+            # Byteswap to hand OpenGL a native array
+            # TODO: can leave this up to OpenGL, but it appears slow...
+            data.byteswap(True)
+            data = data.newbyteorder(sys.byteorder)
+
         width, height = data.shape
         pointer_type = (data.dtype, width, height * num_channels)
 
         if pointer_type != self.pointer_type:
             self.mapped_array = None
+            self.pointer_type = pointer_type
 
-        self.mapped_array = initialize_pbo(self.buffer, data,
-                                           mapped_array=self.mapped_array)
+        self.mapped_array = copy_data_to_pbo(self.buffer, data,
+                                             mapped_array=self.mapped_array)
         self.source_format = source_format
         self.source_type = source_type
         if copy_to_texture:
@@ -305,7 +317,8 @@ class ImageViewerWidgetGL(QOpenGLWidget):
         ChannelType.INT: 'GL_UNSIGNED_SHORT',
         ChannelType.LONG: 'GL_UNSIGNED_INT',
         ChannelType.FLOAT: 'GL_FLOAT',
-        ChannelType.DOUBLE: 'GL_DOUBLE',
+        # glTexImage2D does not support GL_DOUBLE. Conversion below.
+        ChannelType.DOUBLE: 'GL_FLOAT',
     }
 
     image_formats = {
@@ -466,7 +479,8 @@ class ImageViewerWidgetGL(QOpenGLWidget):
         else:
             # Otherwise, it's an easily supported format (RGB888, Mono...)
             array_data = array_data.reshape((width, height * num_chan))
-            self.image.update(array_data, source_format=format, source_type=gl_data_type)
+            self.image.update(array_data, source_format=format,
+                              source_type=gl_data_type)
 
         self.update()
 

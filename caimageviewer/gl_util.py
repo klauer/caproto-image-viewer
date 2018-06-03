@@ -1,3 +1,4 @@
+import sys
 import numpy as np
 from contextlib import contextmanager
 from PyQt5.QtGui import QOpenGLBuffer
@@ -26,41 +27,50 @@ def update_vertex_buffer(vbo, data):
         vbo.allocate(vertices.flatten(), vertices.nbytes)
 
 
-def initialize_pbo(pbo, data, *, mapped_array=None):
-    with bind(pbo):
-        full_size = data.nbytes
-        width, height = data.shape
+def copy_data_to_pbo(pbo, data, *, mapped_array=None):
+    'Allocate or update data stored in a pixel buffer object'
+    width, height = data.shape
 
-        pointer_type = np.ctypeslib.ndpointer(
-            dtype=data.dtype, shape=(width, height), ndim=data.ndim)
-        if (pbo.isCreated() and mapped_array is not None and
-                mapped_array.dtype == pointer_type):
+    with bind(pbo):
+        if pbo.isCreated() and mapped_array is not None:
             mapped_array[:] = data.reshape((width, height))
             return mapped_array
+
+    full_size = data.nbytes
+    pointer_type = np.ctypeslib.ndpointer(
+        dtype=data.dtype, shape=(width, height), ndim=data.ndim)
 
     pbo.create()
     with bind(pbo):
         pbo.allocate(data, full_size)
-
-        ptr = pbo.map(QOpenGLBuffer.ReadOnly)
+        ptr = pbo.map(QOpenGLBuffer.WriteOnly)
         assert ptr is not None, 'Failed to map pixel buffer array'
 
         pointer_type = np.ctypeslib.ndpointer(
             dtype=data.dtype, shape=(width, height), ndim=data.ndim)
         mapped_array = np.ctypeslib.as_array(pointer_type(int(ptr)))
         pbo.unmap()
+        mapped_array[:] = data.reshape((width, height))
     return mapped_array
 
 
 def update_pbo_texture(gl, pbo, texture, *, array_data, texture_format,
                        source_format, source_type):
+    'Update a texture associated with a PBO'
     width, height = array_data.shape[:2]
 
     if source_format == gl.GL_RGB:
         height //= 3
 
     with bind(pbo, texture):
+        # AreaDetector arrays are not strided
         gl.glPixelStorei(gl.GL_UNPACK_ALIGNMENT, 1)
+        # AreaDetector arrays are big endian - so let OpenGL take care of
+        # byteswapping if that doesn't match up with the system/array
+        # endianness
+        # gl.glPixelStorei(gl.GL_UNPACK_SWAP_BYTES,
+        #                  int(not array_data.dtype.isnative))
+
         gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MIN_FILTER,
                            gl.GL_LINEAR)
         gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MAG_FILTER,
