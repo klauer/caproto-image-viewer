@@ -5,6 +5,7 @@ caproto/PyQt5-based EPICS AreaDetector image viewer with OpenGL/GLSL color
 mapping
 
 Provides two widgets with varying support for image types (see next section):
+
     1. ImageViewerWidgetGL
         a. Requires OpenGL 4.1-compatible hardware
         b. Optional color-mapping (using look-up tables from matplotlib)
