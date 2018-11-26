@@ -1,6 +1,8 @@
 import logging
 import time
 
+from collections import namedtuple, deque
+
 from qtpy.QtWidgets import (QWidget, QLabel, QVBoxLayout)
 from qtpy import QtGui, QtCore
 from qtpy.QtCore import Slot
@@ -28,7 +30,7 @@ class ImageViewerWidget(QWidget):
 
         self.image = None
         self.pixmap = None
-        self.image_times = []
+        self.image_times = deque([], 20000)
         self.image_formats = {
             ('Mono', ChannelType.CHAR): QtGui.QImage.Format_Grayscale8,
             # TODO: others could be implemented

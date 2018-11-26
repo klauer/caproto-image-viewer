@@ -3,7 +3,7 @@ import sys
 import logging
 
 import numpy as np
-from collections import namedtuple
+from collections import namedtuple, deque
 
 from pathlib import Path
 from qtpy import QtCore, QtGui
@@ -51,6 +51,7 @@ def load_colormaps(include_all=True):
             colormaps[key] = colors.reshape((len(colors), 3))
 
     return colormaps
+
 
 class TextureAndPBO:
     'Container for texture and pixel buffer object'
@@ -368,7 +369,7 @@ class ImageViewerWidgetGL(QOpenGLWidget):
 
         super().__init__()
 
-        self.image_times = []
+        self.image_times = deque([], 20000)
         self.gl_initialized = False
         self._state = 'connecting'
         self.colormap = default_colormap
@@ -457,10 +458,9 @@ class ImageViewerWidgetGL(QOpenGLWidget):
             rdata = np.ascontiguousarray(array_data[:, 0, :])
             gdata = np.ascontiguousarray(array_data[:, 1, :])
             bdata = np.ascontiguousarray(array_data[:, 2, :])
-            for chunk, pbo in zip((rdata, gdata, bdata),
-                                  (self.image_r,
-                                   self.image_g,
-                                   self.image_b)):
+            for chunk, pbo in zip(
+                    (rdata, gdata, bdata),
+                    (self.image_r, self.image_g, self.image_b)):
                 pbo.update(chunk.reshape(width, height),
                            source_format=self.gl.GL_RED,
                            source_type=gl_data_type,
@@ -468,12 +468,11 @@ class ImageViewerWidgetGL(QOpenGLWidget):
         elif color_mode == 'RGB3':
             # But this is quite fast
             chunk_size = width * height
-            data_and_pbo = ((array_data[:chunk_size],
-                             self.image_r),
-                            (array_data[chunk_size:2 * chunk_size],
-                             self.image_g),
-                            (array_data[2 * chunk_size:],
-                             self.image_b))
+            data_and_pbo = (
+                (array_data[:chunk_size], self.image_r),
+                (array_data[chunk_size:2 * chunk_size], self.image_g),
+                (array_data[2 * chunk_size:], self.image_b)
+            )
             for chunk, pbo in data_and_pbo:
                 pbo.update(chunk.reshape(width, height),
                            source_format=self.gl.GL_RED,
