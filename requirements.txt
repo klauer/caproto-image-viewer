@@ -1,4 +1,5 @@
 caproto
 PyQt5
+qtpy
 matplotlib
 numpy

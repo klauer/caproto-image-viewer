@@ -1,7 +1,7 @@
 import sys
 import numpy as np
 from contextlib import contextmanager
-from PyQt5.QtGui import QOpenGLBuffer
+from qtpy.QtGui import QOpenGLBuffer
 
 
 def setup_vertex_buffer(gl, data, shader, shader_variable):

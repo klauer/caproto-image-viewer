@@ -6,10 +6,10 @@ import numpy as np
 from collections import namedtuple
 
 from pathlib import Path
-from PyQt5 import QtCore, QtGui
-from PyQt5.QtCore import pyqtSlot
-from PyQt5.QtWidgets import QOpenGLWidget
-from PyQt5.QtGui import QOpenGLBuffer
+from qtpy import QtCore, QtGui
+from qtpy.QtCore import Slot
+from qtpy.QtWidgets import QOpenGLWidget
+from qtpy.QtGui import QOpenGLBuffer
 
 from .util import (show_statistics, get_image_size)
 
@@ -415,11 +415,11 @@ class ImageViewerWidgetGL(QOpenGLWidget):
                 show_statistics(self.image_times)
                 self._statistics_shown = True
 
-    @pyqtSlot(Exception)
+    @Slot(Exception)
     def monitor_errored(self, ex):
         self.title = repr(ex)
 
-    @pyqtSlot(int, int, int, str, str)
+    @Slot(int, int, int, str, str)
     def image_resized(self, width, height, depth, color_mode, bayer_pattern):
         width, height, depth = get_image_size(width, height, depth, color_mode)
         if width == 0 or height == 0:
@@ -427,7 +427,7 @@ class ImageViewerWidgetGL(QOpenGLWidget):
 
         self.resize(width, height)
 
-    @pyqtSlot(float, int, int, int, str, str, object, object)
+    @Slot(float, int, int, int, str, str, object, object)
     def display_image(self, frame_timestamp, width, height, depth, color_mode,
                       bayer_pattern, dtype, array_data):
         if not self.gl_initialized:

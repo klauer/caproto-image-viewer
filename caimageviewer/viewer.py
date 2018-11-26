@@ -1,9 +1,9 @@
 import logging
 import time
 
-from PyQt5.QtWidgets import (QWidget, QLabel, QVBoxLayout)
-from PyQt5 import QtGui, QtCore
-from PyQt5.QtCore import pyqtSlot
+from qtpy.QtWidgets import (QWidget, QLabel, QVBoxLayout)
+from qtpy import QtGui, QtCore
+from qtpy.QtCore import Slot
 
 from .util import show_statistics
 from caproto import ChannelType
@@ -46,17 +46,17 @@ class ImageViewerWidget(QWidget):
         if self.show_statistics and self.image_times:
             show_statistics(self.image_times)
 
-    @pyqtSlot(Exception)
+    @Slot(Exception)
     def monitor_errored(self, ex):
         self.status_label.setText(f'{ex.__class__.__name__}: {ex}')
         print(repr(ex))
 
-    @pyqtSlot(int, int, int, str, str)
+    @Slot(int, int, int, str, str)
     def image_resized(self, width, height, depth, color_mode, bayer_pattern):
         self.resize(width, height)
         self.status_label.setText(f'Image: {width}x{height} ({color_mode})')
 
-    @pyqtSlot(float, int, int, int, str, str, object, object)
+    @Slot(float, int, int, int, str, str, object, object)
     def display_image(self, timestamp, width, height, depth, color_mode,
                       bayer_pattern, data_type, array_data):
         logger.debug('%s %s %d %s %s', timestamp, (width, height, color_mode),

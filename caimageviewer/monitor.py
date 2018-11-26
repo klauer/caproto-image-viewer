@@ -5,8 +5,8 @@ import logging
 import numpy as np
 import caproto as ca
 
-from PyQt5.QtCore import QThread, pyqtSignal
-from PyQt5 import QtGui
+from qtpy.QtCore import QThread, Signal
+from qtpy import QtGui
 from caproto import ChannelType
 
 
@@ -31,13 +31,13 @@ pv_formats = {
 
 class ImageMonitor(QThread):
     # new_image_size: width, height, depth, color_mode, bayer_pattern
-    new_image_size = pyqtSignal(int, int, int, str, str)
+    new_image_size = Signal(int, int, int, str, str)
 
     # new_image: timestamp, width, height, depth, color_mode, bayer_pattern,
     #            ChannelType, array_data
-    new_image = pyqtSignal(float, int, int, int, str, str, object, object)
+    new_image = Signal(float, int, int, int, str, str, object, object)
 
-    errored = pyqtSignal(Exception)
+    errored = Signal(Exception)
 
     def __init__(self, prefix, *, cam='cam1:', image='image1:', acquire=False,
                  barrier=None):
@@ -126,8 +126,10 @@ class ImageMonitorThreaded(ImageMonitor):
 
         if self.acquire:
             self.pvs['enabled'].write([1], wait=True)
-            self.pvs['image_mode'].write(b'Continuous', wait=True)
-            self.pvs['acquire'].write(b'Acquire', wait=False)
+            self.pvs['image_mode'].write('Continuous',
+                                         data_type=ChannelType.STRING,
+                                         wait=True)
+            self.pvs['acquire'].write(1, wait=False)
 
         width = self.pvs['array_size0'].read().data[0]
         height = self.pvs['array_size1'].read().data[0]

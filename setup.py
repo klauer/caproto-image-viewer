@@ -14,7 +14,7 @@ classifiers = [
 ]
 
 
-standard_requirements = ['PyQt5', 'numpy', 'caproto']
+standard_requirements = ['numpy', 'caproto', 'qtpy']
 
 setup(
     name='caimageviewer',
