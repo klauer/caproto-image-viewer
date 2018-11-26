@@ -97,15 +97,15 @@ class ImageMonitorSync(ImageMonitor):
                 raise KeyboardInterrupt
 
             native_type = ca.field_types['native'][response.data_type]
-            # TODO server timestamps
-            self.new_image.emit(time.time(), width, height, depth, color_mode,
-                                bayer_pattern, native_type, response.data)
+            self.new_image.emit(response.metadata.timestamp, width, height,
+                                depth, color_mode, bayer_pattern, native_type,
+                                response.data)
 
         if self.barrier is not None:
             # Synchronize with image viewer widget, if necessary
             self.barrier.wait()
 
-        sub = subscribe(self.pvs['array_data'])
+        sub = subscribe(self.pvs['array_data'], data_type='time')
         sub.add_callback(update)
         sub.block()
         self.stop_event.wait()
