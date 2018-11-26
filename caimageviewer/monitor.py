@@ -1,5 +1,6 @@
 import time
 import threading
+import logging
 
 import numpy as np
 import caproto as ca
@@ -7,6 +8,9 @@ import caproto as ca
 from PyQt5.QtCore import QThread, pyqtSignal
 from PyQt5 import QtGui
 from caproto import ChannelType
+
+
+logger = logging.getLogger(__name__)
 
 
 pv_formats = {
@@ -55,32 +59,31 @@ class ImageMonitor(QThread):
         self.stop_event.set()
 
     def run(self):
+        if not self.acquire:
+            del self.pvs['enabled']
+            del self.pvs['image_mode']
+            del self.pvs['acquire']
+
         try:
             self._run()
         except Exception as ex:
             self.errored.emit(ex)
+            logger.exception(ex)
 
 
 class ImageMonitorSync(ImageMonitor):
     def _run(self):
-        from caproto.sync.client import (get as caget,
-                                         put as caput,
-                                         monitor as camonitor)
+        from caproto.sync.client import (read, write, subscribe)
         if self.acquire:
-            caput(self.pvs['enabled'], 1)
-            caput(self.pvs['image_mode'], 'Continuous')
+            write(self.pvs['enabled'], [1])
+            write(self.pvs['image_mode'], 'Continuous', data_type=ChannelType.STRING)
+            write(self.pvs['acquire'], [1], notify=False)
 
-            try:
-                caput(self.pvs['acquire'], 'Acquire', verbose=True)
-            except TimeoutError:
-                ...
-                # TODO: a wait=false option on sync client?
-
-        width = caget(self.pvs['array_size0']).data[0]
-        height = caget(self.pvs['array_size1']).data[0]
-        depth = caget(self.pvs['array_size2']).data[0]
-        color_mode = caget(self.pvs['color_mode']).data[0].decode('ascii')
-        bayer_pattern = caget(self.pvs['bayer_pattern'])
+        width = read(self.pvs['array_size0']).data[0]
+        height = read(self.pvs['array_size1']).data[0]
+        depth = read(self.pvs['array_size2']).data[0]
+        color_mode = read(self.pvs['color_mode']).data[0].decode('ascii')
+        bayer_pattern = read(self.pvs['bayer_pattern'])
         bayer_pattern = bayer_pattern.data[0].decode('ascii')
 
         self.new_image_size.emit(width, height, depth, color_mode,
@@ -89,7 +92,7 @@ class ImageMonitorSync(ImageMonitor):
         print(f'width: {width} height: {height} depth: {depth} '
               f'color_mode: {color_mode}')
 
-        def update(pv_name, response):
+        def update(response):
             if self.stop_event.is_set():
                 raise KeyboardInterrupt
 
@@ -102,7 +105,9 @@ class ImageMonitorSync(ImageMonitor):
             # Synchronize with image viewer widget, if necessary
             self.barrier.wait()
 
-        camonitor(self.pvs['array_data'], callback=update)
+        sub = subscribe(self.pvs['array_data'])
+        sub.add_callback(update)
+        sub.block()
         self.stop_event.wait()
 
 
@@ -115,6 +120,7 @@ class ImageMonitorThreaded(ImageMonitor):
         self.pvs = {key: pv for key, pv in
                     zip(self.pvs, context.get_pvs(*self.pvs.values()))
                     }
+
         for pv in self.pvs.values():
             pv.wait_for_connection()
 
