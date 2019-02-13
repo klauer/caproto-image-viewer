@@ -1,3 +1,4 @@
+import os
 import time
 import threading
 import logging
@@ -226,6 +227,10 @@ class ImageMonitorPyepics(ImageMonitor):
 class ImageMonitorStatic(ImageMonitor):
     def _run(self):
         self.filename = self.prefix
+
+        if not os.path.exists(self.filename):
+            raise RuntimeError(f'Image file does not exist: {self.filename}')
+
         image = QtGui.QImage(self.filename)
         image = image.convertToFormat(QtGui.QImage.Format_Grayscale8)
 
