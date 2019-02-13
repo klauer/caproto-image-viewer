@@ -7,7 +7,7 @@ uniform highp sampler2D LUT;
 uniform highp sampler2D image;
 
 // User definitions (interpolated by Python)
-%s
+${definitions}
 
 in VS_OUT
 {
@@ -90,5 +90,5 @@ void main(void) {
             color.rgba = vec4(PATTERN.yx, C, 1.0);
     }
     // User return-value modification (interpolated by Python)
-    %s
+    ${main}
 }

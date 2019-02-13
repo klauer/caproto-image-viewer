@@ -1,4 +1,5 @@
 import time
+import string
 import sys
 import logging
 
@@ -123,16 +124,18 @@ class ImageShader:
 
         if isinstance(self.fragment_source, Path):
             with open(self.fragment_source, 'rt') as f:
-                source = f.read()
-            self.fragment_source = source % (self.definitions, fragment_main)
+                template = string.Template(f.read())
         else:
-            self.fragment_source = self.fragment_source % (self.definitions,
-                                                           fragment_main)
+            template = string.Template(self.fragment_source)
+
+        self.fragment_source = template.substitute(
+            definitions=self.definitions, main=fragment_main)
 
         if isinstance(self.vertex_source, Path):
             with open(self.vertex_source, 'rt') as f:
-                source = f.read()
-            self.vertex_source = source
+                template = string.Template(f.read())
+
+            self.vertex_source = template.substitute()
 
         self.shader = QtGui.QOpenGLShaderProgram(opengl_widget)
         self.shader.addShaderFromSourceCode(QtGui.QOpenGLShader.Vertex,
@@ -362,6 +365,8 @@ class ImageViewerWidgetGL(QOpenGLWidget):
             version_profile.setVersion(4, 1)
             version_profile.setProfile(QtGui.QSurfaceFormat.CoreProfile)
 
+        logger.debug('Requested version profile is: %r',
+                     version_profile.version())
         self.cmap_preview = False
         self.preview_rows = 3
         self.format = format

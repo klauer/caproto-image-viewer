@@ -7,7 +7,7 @@ uniform highp sampler2D LUT;
 uniform highp sampler2D image;
 
 // Definitions interpolated by Python:
-%s
+${definitions}
 
 // Output is a color for each pixel
 layout(location=0, index=0) out vec4 color;
@@ -21,5 +21,5 @@ in VS_OUT
 void main(void)
 {
     // Main text interpolated by Python:
-    %s
+    ${main}
 }
