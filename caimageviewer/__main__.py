@@ -21,7 +21,7 @@ def main():
     parser.add_argument('--stats', default=False, action='store_true',
                         help='Show image display statistics on exit')
 
-    # --gl
+    # --gl / --no-gl in a mutually exclusive group
     group = parser.add_mutually_exclusive_group(required=False)
 
     group.add_argument(
