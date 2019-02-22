@@ -7,7 +7,7 @@ from qtpy.QtWidgets import (QWidget, QLabel, QVBoxLayout)
 from qtpy import QtGui, QtCore
 from qtpy.QtCore import Slot
 
-from .util import show_statistics
+from .util import (show_statistics, get_image_size, convert_to_rgb)
 from caproto import ChannelType
 
 
@@ -31,11 +31,10 @@ class ImageViewerWidget(QWidget):
         self.image = None
         self.pixmap = None
         self.image_times = deque([], 20000)
-        self.image_formats = {
+        self.native_image_formats = {
             ('Mono', ChannelType.CHAR): QtGui.QImage.Format_Grayscale8,
-            # TODO: others could be implemented
+            ('RGB1', ChannelType.CHAR): QtGui.QImage.Format_RGB888,
         }
-
         self.monitor = monitor
         self.monitor.new_image_size.connect(self.image_resized)
         self.monitor.new_image.connect(self.display_image)
@@ -55,6 +54,9 @@ class ImageViewerWidget(QWidget):
 
     @Slot(int, int, int, str, str)
     def image_resized(self, width, height, depth, color_mode, bayer_pattern):
+        width, height, num_chan = get_image_size(width, height, depth,
+                                                 color_mode)
+
         self.resize(width, height)
         self.status_label.setText(f'Image: {width}x{height} ({color_mode})')
 
@@ -64,9 +66,19 @@ class ImageViewerWidget(QWidget):
         logger.debug('%s %s %d %s %s', timestamp, (width, height, color_mode),
                      len(array_data), array_data[:5], array_data.dtype)
 
-        image_format = self.image_formats[(color_mode, data_type)]
+        width, height, num_chan = get_image_size(width, height, depth,
+                                                 color_mode)
+
+        try:
+            image_format = self.native_image_formats[(color_mode, data_type)]
+        except KeyError:
+            array_data = convert_to_rgb(array_data, width, height, color_mode,
+                                        maximum=2 ** 8)
+            image_format = QtGui.QImage.Format_RGB888
+
         self.image = QtGui.QImage(array_data, width, height, image_format)
         self.pixmap = QtGui.QPixmap.fromImage(self.image)
+
         self.image_label.setPixmap(self.pixmap)
         self.image_times.append((timestamp, time.time(), array_data.nbytes))
 

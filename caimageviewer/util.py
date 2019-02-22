@@ -68,3 +68,55 @@ def show_statistics(image_times, *, plot_times=True):
     plt.suptitle(title)
     plt.savefig('display_statistics.pdf')
     plt.show()
+
+
+def convert_to_rgb(array_data, width, height, color_mode, *, normalize=None):
+    '''Software conversion to RGB
+
+    Parameters
+    ----------
+    array_data : np.ndarray
+        ArrayData from EPICS
+    width : int
+        Image width
+    height : int
+        Image height
+    color_mode : str
+        Color mode {'Bayer', 'Mono', 'RGB1', 'RGB2', 'RGB3'}
+        Bayer demosaic is not applied to the output RGB image array.
+    normalize : int/float, optional
+        Value with which to normalize the results with. If unspecified, uses
+        the maximum number representable by the array_data dtype.
+    '''
+    if color_mode in ('Bayer', 'Mono'):
+        # TODO improve
+        mono = array_data.reshape((width, height))
+        rgb = np.zeros((width, height, 3), dtype=mono.dtype)
+        rgb[:, :, 0] = mono
+        rgb[:, :, 1] = mono
+        rgb[:, :, 2] = mono
+    elif color_mode == 'RGB1':
+        rgb = array_data.reshape((width, height, 3))
+    elif color_mode == 'RGB2':
+        array_data = array_data.reshape((width, 3, height))
+        # r = array_data[:, 0, :]
+        rgb = array_data.swapaxes(1, 2)
+    elif color_mode == 'RGB3':
+        array_data = array_data.reshape((3, width, height))
+        # r = array_data[0, :, :]
+        rgb = array_data.swapaxes(0, 2)
+
+    if rgb.dtype.itemsize != 1:
+        if array_data.dtype.name in ('float32', 'float64'):
+            if normalize is None or normalize == 1.0:
+                rgb *= 255.0
+            else:
+                rgb = (rgb / normalize) * 255.0
+        else:
+            if normalize is None:
+                normalize = 2.0 ** (8 * rgb.dtype.itemsize)
+            rgb = (rgb.astype(np.float64) / normalize) * 255.0
+
+        rgb = rgb.astype(np.uint8)
+
+    return rgb.flatten()

@@ -231,25 +231,33 @@ class ImageMonitorStatic(ImageMonitor):
         if not os.path.exists(self.filename):
             raise RuntimeError(f'Image file does not exist: {self.filename}')
 
-        image = QtGui.QImage(self.filename)
-        image = image.convertToFormat(QtGui.QImage.Format_Grayscale8)
-
-        width = image.width()
-        height = image.height()
-        image.__array_interface__ = {
-            'shape': (height, width),
-            'typestr': '|u1',
-            'data': image.bits().asarray(size=width * height),
-            'strides': (image.bytesPerLine(), 1),
-            'version': 3,
-        }
-
-        data = np.ascontiguousarray(image, dtype=np.uint8)
-        data = data.reshape(height, width)
-
-        depth = 1
-        color_mode = 'Bayer'
         bayer_pattern = 'RGGB'
+
+        if self.filename.endswith('.npz'):
+            npz = np.load(self.filename)
+            width, height, depth = npz['array_size']
+            data = npz['image']
+            color_mode = npz['color_mode'].tolist()
+            print(color_mode, type(color_mode))
+        else:
+            image = QtGui.QImage(self.filename)
+            image = image.convertToFormat(QtGui.QImage.Format_Grayscale8)
+
+            width = image.width()
+            height = image.height()
+            image.__array_interface__ = {
+                'shape': (height, width),
+                'typestr': '|u1',
+                'data': image.bits().asarray(size=width * height),
+                'strides': (image.bytesPerLine(), 1),
+                'version': 3,
+            }
+
+            data = np.ascontiguousarray(image, dtype=np.uint8)
+            data = data.reshape(height, width)
+
+            depth = 1
+            color_mode = 'Bayer'
 
         self.new_image_size.emit(width, height, depth, color_mode,
                                  bayer_pattern)
@@ -261,9 +269,17 @@ class ImageMonitorStatic(ImageMonitor):
             # Synchronize with image viewer widget, if necessary
             self.barrier.wait()
 
+        channel_type = {
+            'uint8': ChannelType.CHAR,
+            'int16': ChannelType.INT,
+            'int32': ChannelType.LONG,
+            'float32': ChannelType.FLOAT,
+            'float64': ChannelType.DOUBLE,
+        }[data.dtype.name]
+
         while not self.stop_event.is_set():
             self.new_image.emit(time.time(), width, height, depth, color_mode,
-                                bayer_pattern, ChannelType.CHAR, data)
+                                bayer_pattern, channel_type, data)
             time.sleep(0.1)
 
 
