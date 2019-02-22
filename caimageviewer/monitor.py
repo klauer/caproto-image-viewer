@@ -269,9 +269,17 @@ class ImageMonitorStatic(ImageMonitor):
             # Synchronize with image viewer widget, if necessary
             self.barrier.wait()
 
+        channel_type = {
+            'uint8': ChannelType.CHAR,
+            'int16': ChannelType.INT,
+            'int32': ChannelType.LONG,
+            'float32': ChannelType.FLOAT,
+            'float64': ChannelType.DOUBLE,
+        }[data.dtype.name]
+
         while not self.stop_event.is_set():
             self.new_image.emit(time.time(), width, height, depth, color_mode,
-                                bayer_pattern, ChannelType.CHAR, data)
+                                bayer_pattern, channel_type, data)
             time.sleep(0.1)
 
 
