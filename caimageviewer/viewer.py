@@ -3,11 +3,16 @@ import time
 
 from collections import namedtuple, deque
 
+import numpy as np
+
 from qtpy.QtWidgets import (QWidget, QLabel, QVBoxLayout)
 from qtpy import QtGui, QtCore
 from qtpy.QtCore import Slot
 
-from .util import (show_statistics, get_image_size, convert_to_rgb)
+from .util import (show_statistics, get_image_size, convert_to_rgb,
+                   convert_to_mono)
+from .bayer import demosaic
+
 from caproto import ChannelType
 
 
@@ -69,14 +74,23 @@ class ImageViewerWidget(QWidget):
         width, height, num_chan = get_image_size(width, height, depth,
                                                  color_mode)
 
-        try:
-            image_format = self.native_image_formats[(color_mode, data_type)]
-        except KeyError:
-            array_data = convert_to_rgb(array_data, width, height, color_mode,
-                                        maximum=2 ** 8)
-            image_format = QtGui.QImage.Format_RGB888
+        image_format = QtGui.QImage.Format_RGB888
+
+        if color_mode == 'Bayer':
+            array_data = convert_to_mono(array_data, width, height, color_mode,
+                                         normalize=2 ** 8)
+            array_data = demosaic(array_data, pattern=bayer_pattern)
+            # from colour_demosaicing import demosaicing_CFA_Bayer_bilinear
+            array_data = (array_data * 255).astype(np.uint8)
+        else:
+            try:
+                image_format = self.native_image_formats[(color_mode, data_type)]
+            except KeyError:
+                array_data = convert_to_rgb(array_data, width, height, color_mode,
+                                            normalize=2 ** 8)
 
         self.image = QtGui.QImage(array_data, width, height, image_format)
+        self.data = array_data
         self.pixmap = QtGui.QPixmap.fromImage(self.image)
 
         self.image_label.setPixmap(self.pixmap)
