@@ -22,9 +22,9 @@ Supported Image Formats
 | Format        | ImageViewerWidget  | ImageViewerWidgetGL |
 |:-------------:|:------------------:|:-------------------:|
 | Monochrome    |       Yes          |         Yes         |
-| RGB1          |                    |         Yes         |
-| RGB2          |                    |         Yes         |
-| RGB3          |                    |         Yes         |
+| RGB1          |       Yes          |         Yes         |
+| RGB2          |       Yes          |         Yes         |
+| RGB3          |       Yes          |         Yes         |
 | Bayer - RGGB  |                    |         Yes         |
 | Bayer - GBRG  |                    |         Yes         |
 | Bayer - GRBG  |                    |         Yes         |
@@ -42,7 +42,7 @@ Requirements
 ============
 
 * Python 3.6+
-* caproto
+* caproto or pyepics
 * PyQt5
 * numpy
 
