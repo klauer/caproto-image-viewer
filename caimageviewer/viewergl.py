@@ -60,6 +60,9 @@ class TextureAndPBO:
                  texture_format='GL_RGB32F'):
         self.gl = gl
 
+        self.source_format = None
+        self.source_type = None
+
         # Image texture - pixel buffer object used to map memory to this
         self.texture = QtGui.QOpenGLTexture(QtGui.QOpenGLTexture.Target2D)
         self.texture.allocateStorage()
@@ -352,6 +355,18 @@ class ImageViewerWidgetGL(QOpenGLWidget):
         self.prefix = monitor.prefix
         self.show_statistics = show_statistics
         self._statistics_shown = False
+        self.lookup_table = None
+
+        self.gl = None
+        self._title = None
+        self.image = None
+        self.image_r = None
+        self.image_g = None
+        self.image_b = None
+        self.separate_channel_no_cmap_shader = None
+        self.separate_channel_shader = None
+        self.basic_shaders = None
+        self.shaders_with_cmap = None
 
         if format is None:
             format = QtGui.QSurfaceFormat()
@@ -370,6 +385,7 @@ class ImageViewerWidgetGL(QOpenGLWidget):
         self.cmap_preview = False
         self.preview_rows = 3
         self.format = format
+        self.shader = None
         self.version_profile = version_profile
 
         super().__init__()

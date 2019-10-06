@@ -236,7 +236,7 @@ class ImageMonitorStatic(ImageMonitor):
         if self.filename.endswith('.npz'):
             npz = np.load(self.filename)
             width, height, depth = npz['array_size']
-            data = npz['image']
+            data = np.ascontiguousarray(npz['image'])
             color_mode = npz['color_mode'].tolist()
             print(color_mode, type(color_mode))
         else:
