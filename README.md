@@ -1,6 +1,9 @@
 caproto-image-viewer
 ====================
 
+**DEPRECATED** and unsupported. OpenGL support is broken on the latest numpy,
+and the basic image viewer does not have many features.
+
 caproto/PyQt5-based EPICS AreaDetector image viewer with OpenGL/GLSL color
 mapping
 
