@@ -23,6 +23,7 @@ class ImageViewerWidget(QWidget):
     def __init__(self, monitor, *, show_statistics=False, parent=None):
         super().__init__(parent=parent)
 
+        self.setWindowTitle(monitor.prefix)
         self.show_statistics = show_statistics
         self.layout = QVBoxLayout()
         self.status_label = QLabel('Status')
