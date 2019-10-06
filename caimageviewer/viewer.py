@@ -86,8 +86,12 @@ class ImageViewerWidget(QWidget):
             try:
                 image_format = self.native_image_formats[(color_mode, data_type)]
             except KeyError:
-                array_data = convert_to_rgb(array_data, width, height, color_mode,
-                                            normalize=2 ** 8)
+                try:
+                    array_data = convert_to_rgb(array_data, width, height, color_mode,
+                                                normalize=2 ** 8)
+                except ValueError:
+                    logger.debug('Image may have changed size?')
+                    return
 
         self.image = QtGui.QImage(array_data, width, height, image_format)
         self.data = array_data
