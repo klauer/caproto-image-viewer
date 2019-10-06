@@ -1,3 +1,4 @@
+import functools
 import os
 import time
 import threading
@@ -205,6 +206,26 @@ class ImageMonitorPyepics(ImageMonitor):
 
         native_type = self.epics.ca.native_type
 
+        def image_size_changed(pv_key, value, **kw):
+            nonlocal width, height, depth, color_mode, bayer_pattern
+            if self.stop_event.is_set():
+                self.pvs[pv_key].remove_callback(self.subs[pv_key])
+                return
+
+            if pv_key == 'array_size0':
+                width = value
+            elif pv_key == 'array_size1':
+                height = value
+            elif pv_key == 'array_size2':
+                depth = value
+            elif pv_key == 'color_mode':
+                color_mode = value
+            elif pv_key == 'bayer_pattern':
+                bayer_pattern = value
+
+            self.new_image_size.emit(width, height, depth, color_mode,
+                                     bayer_pattern)
+
         def update(value=None, **kw):
             if self.stop_event.is_set():
                 self.pvs['array_data'].remove_callback(self.sub)
@@ -221,6 +242,11 @@ class ImageMonitorPyepics(ImageMonitor):
             self.barrier.wait()
 
         self.sub = self.pvs['array_data'].add_callback(update)
+        self.subs = {}
+        for pv_key in ('array_size0', 'array_size1', 'array_size2',
+                       'color_mode', 'bayer_pattern'):
+            pv = self.pvs[pv_key]
+            self.subs[pv_key] = pv.add_callback(functools.partial(image_size_changed, pv_key))
         self.stop_event.wait()
 
 
@@ -236,7 +262,7 @@ class ImageMonitorStatic(ImageMonitor):
         if self.filename.endswith('.npz'):
             npz = np.load(self.filename)
             width, height, depth = npz['array_size']
-            data = npz['image']
+            data = np.ascontiguousarray(npz['image'])
             color_mode = npz['color_mode'].tolist()
             print(color_mode, type(color_mode))
         else:
